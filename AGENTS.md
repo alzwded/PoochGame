@@ -1,18 +1,19 @@
 # AGENTS.md — Pooch Runner Project Context & Instructions
 
-This document specifies the architecture, coding rules, asset pipelines, game mechanics, and implementation roadmap for building **Pooch Runner**, a pure Kotlin full-screen 2D endless side-scrolling runner for Android.
+This document specifies the architecture, coding rules, asset pipelines, game mechanics, and implementation roadmap for building **Pooch Runner**, a pure Kotlin full-screen 2D endless side-scrolling runner for Android designed for **Portrait Mode**.
 
 ---
 
 ## 1. Project Overview & Vision
 
-**Pooch Runner** is a lightweight, responsive 2D endless runner built without heavy game engine dependencies (e.g., LibGDX, Unity). It utilizes pure Kotlin with native Android UI context, rendering to a 60 FPS game loop via `SurfaceView` and `Canvas`.
+**Pooch Runner** is a lightweight, responsive 2D endless runner built without heavy third-party game engines (e.g., LibGDX, Unity) or low-level C++/OpenGL ES wrappers. It utilizes pure Kotlin with native Android UI context, rendering to a surface via `SurfaceView` and `SurfaceHolder.lockHardwareCanvas()`.
 
 ### Key Game Mechanics
-- **Controls**: Single-tap anywhere on the screen triggers a jump.
+- **Display & Orientation**: Forced **Portrait Mode** full-screen layout (`android:screenOrientation="portrait"`).
+- **Controls**: Single-tap anywhere on screen triggers a jump.
 - **States & Flow**:
-  - `TOUCH_TO_START`: Fullscreen splash screen showing title/tap directive.
-  - `PLAYING`: Normal scrolling state. Jump over Shy Guys, collect Fudge snacks.
+  - `TOUCH_TO_START`: Full-screen portrait splash screen showing title/tap directive.
+  - `PLAYING`: Standard portrait scrolling state. Jump over Shy Guys, collect Fudge snacks.
   - `SUPER_MODE`: Triggered upon collecting **10 Fudges**.
     - Player scales up (~1.8x – 2.0x).
     - Game speed increases significantly.
@@ -25,95 +26,124 @@ This document specifies the architecture, coding rules, asset pipelines, game me
     - Prompts screen reset to `TOUCH_TO_START`.
 - **Collectibles**: Fudges (+1 to super mode counter, plays chew animation/SFX).
 - **Obstacles**: Shy Guys (single units or towers).
-- **Visuals**: Endless scrolling background, bitmap sprite animations parsed via JSON atlas descriptors with custom origins/pivots.
+- **Background & Camera System**:
+  - Source background image is **Landscape**.
+  - Camera clips/zooms into a **10:16 portrait viewport** slice of the landscape texture.
+  - Background scrolls horizontally and loops seamlessly.
 
 ---
 
 ## 2. Technical Stack & Target Environment
 
 - **Language**: Kotlin 1.9+ / 2.0+
-- **Platform**: Android SDK (Min API 24+, Target API 34+)
-- **Graphics Engine**: Native Android `SurfaceView` + custom hardware-accelerated `Canvas` game loop.
+- **Platform Specs**:
+  - **Min API**: 31 (Android 12+) — eliminating legacy `Build.VERSION.SDK_INT` runtime checks across all engine systems.
+  - **Target API**: 36
+- **Graphics & Rendering Technology**:
+  - **Pipeline**: Native Android `SurfaceView` rendering via **`SurfaceHolder.lockHardwareCanvas()`**.
+  - **OpenGL ES Decision**: Raw OpenGL ES (`GLSurfaceView`) is **omitted**. Modern Android hardware-accelerates 2D `Canvas` calls directly via Skia (Vulkan / OpenGL ES backend). `lockHardwareCanvas()` provides GPU acceleration out of the box with zero GL context/lifecycle boilerplate, simplified bitmap management, and optional AGSL (`RuntimeShader`) support for `Paint` effects on API 31+.
+- **Frame Rate & Battery Pacing**:
+  - **Standard Target**: $60\text{ FPS}$ (frame budget $\approx 16.6\text{ ms}$).
+  - **Power-Saving / Game Booster Target**: $30\text{ FPS}$ (frame budget $\approx 33.3\text{ ms}$).
+  - **Delta-Time Decoupling**: Physics calculations **MUST** be scaled by elapsed delta time $\Delta t$ in seconds so movement speeds remain identical regardless of whether the device runs at $60\text{ FPS}$ or throttles to $30\text{ FPS}$.
 - **Audio Engine**: 
   - `SoundPool` for low-latency SFX (bark, steps, chew, grow, smash).
   - `MediaPlayer` for background music tracks (Main BG & Super Mode BG).
-- **Asset Serialization**: `org.json` or `kotlinx.serialization` for parsing sprite atlas map files.
+- **Asset Serialization**: `org.json` for parsing JSON array sprite maps.
 
 ---
 
-## 3. Game Engine Architecture
+## 3. Game Engine Architecture & Rendering Pipeline
 
 ```
-[ MainActivity ]
-       │
-       ▼
-[ GameSurfaceView ] ──(Runs Game Thread @ 60 FPS)──► [ GameEngine ]
-                                                             │
-            ┌───────────────────┬────────────────────────────┼───────────────────────────┐
-            ▼                   ▼                            ▼                           ▼
-    [ State Machine ]   [ Asset Manager ]            [ Physics / Collision ]     [ Sound Manager ]
-    - TouchToStart      - SpriteAtlas JSON parser    - AABB Hitboxes             - SoundPool (SFX)
-    - Playing           - Bitmap Sheets              - Jump Kinematics           - MediaPlayer (BGM)
-    - SuperMode         - Sound Pool                 - Scroll Speeds
-    - GameOver Anim
+[ MainActivity (Portrait API 36) ]
+            │
+            ▼
+   [ GameSurfaceView ] ──(Runs Dynamic Thread @ 60/30 FPS)──► [ GameEngine ]
+                                                                     │
+       ┌───────────────────┬─────────────────────────────────────────┼───────────────────────────┐
+       ▼                   ▼                                         ▼                           ▼
+[ State Machine ]   [ Multi-Atlas Loader ]                  [ Dynamic $\Delta t$ Physics ]  [ Sound Manager ]
+- TouchToStart      - Pooch Sheet + JSON                    - 10:16 Viewport Clip       - SoundPool (SFX)
+- Playing           - ShyGuy Sheet + JSON                   - AABB Hitboxes             - MediaPlayer (BGM)
+- SuperMode         - Fudge Sheet + JSON                    - Jump Kinematics
+- GameOver Anim     - UI Sheet + JSON
+                                                                     │
+                                                                     ▼
+                                                     [ lockHardwareCanvas() Pipeline ]
+                                                     - Zero-Allocation Draw Passes
+                                                     - Origin Pivot Sub-Bitmap Slicing
+                                                     - 10:16 Aspect Viewport Crop
 ```
 
-### Core Architecture Components
+### Core Engine Components
 
 1. **`GameLoopThread`**:
-   - Manages fixed update delta time ($\Delta t$) targeting ~60 FPS (16.6 ms frame budget).
-   - Handles `SurfaceHolder` locking/unlocking `Canvas`.
-   - Thread-safe pause/resume bound to Activity lifecycle (`onPause`/`onResume`).
+   - Throttles frames dynamically based on device refresh rate ($60\text{ FPS}$ default, $30\text{ FPS}$ battery saver mode).
+   - Calculates real-time $\Delta t = (t_{\text{current}} - t_{\text{previous}})$ capped at $0.05\text{ s}$ to prevent physics tunneling during micro-stutters.
+   - Handles surface locking via `holder.lockHardwareCanvas()` and unlocking via `holder.unlockCanvasAndPost(canvas)`.
 
-2. **`GameViewport` / Scaler**:
-   - Maintains a virtual logical resolution (e.g., $1920 \times 1080$).
-   - Maps screen dimensions to the virtual canvas, maintaining aspect ratio.
+2. **`ViewportCamera` & Background Scrolling**:
+   - Logical virtual workspace locked to a **10:16 aspect ratio** (e.g., $1080 \times 1728$).
+   - Samples a 10:16 portrait crop slice out of the landscape background bitmap.
+   - Calculates two-pass draw calls when scrolling spans the seamless horizontal looping boundary.
 
-3. **`SpriteAtlas` System**:
-   - Loads master atlas PNG/JPEG and corresponding `.json` definition.
-   - Computes sub-bitmaps and pivot offsets.
-   - **JSON Format Standard**:
+3. **Multi-Sheet `SpriteAtlasManager`**:
+   - Manages independent PNG/JPEG sheets with matching JSON descriptor files (`pooch.json`, `shyguy.json`, `fudge.json`, etc.).
+   - **JSON Format Standard (Per Atlas)**:
      ```json
-     {
-       "frames": {
-         "pooch_run_01.png": {
-           "x": 0, "y": 0, "w": 64, "h": 64,
-           "pivotX": 0.5, "pivotY": 1.0
-         },
-         "shy_guy_walk_01.png": {
-           "x": 64, "y": 0, "w": 48, "h": 48,
-           "pivotX": 0.5, "pivotY": 1.0
-         }
+     [
+       {
+         "id": "pooch_run_0",
+         "x": 283,
+         "y": 116,
+         "width": 213,
+         "height": 120,
+         "originX": 133,
+         "originY": 54
+       },
+       {
+         "id": "pooch_run_1",
+         "x": 534,
+         "y": 107,
+         "width": 216,
+         "height": 128,
+         "originX": 135,
+         "originY": 53
        }
-     }
+     ]
      ```
+   - Engine parses `id` keys to automatically sequence and index animation frames (e.g., `pooch_run_0`, `pooch_run_1`).
+   - `originX` and `originY` determine entity ground pivots and relative alignment.
 
-4. **Zero-Allocation Game Loop Standard**:
-   - **CRITICAL**: Absolutely no object allocations inside `onDraw()` or `update()` (e.g., no `new Rect()`, `Paint()`, or string concatenations).
-   - Pre-allocate all `RectF`, `Matrix`, `Paint`, `StringBuilder`, and array iterator instances during startup.
+4. **Zero-Allocation Rendering Rules**:
+   - **CRITICAL**: Absolutely no heap allocations (`Rect`, `RectF`, `Paint`, `Matrix`, `String` concatenations, or collections iterators) inside the main `update()` or `render()` execution loop.
+   - Pre-allocate all draw bounds (`srcRect`, `dstRect`), transformation objects, and paint instances during initialization.
 
 ---
 
-## 4. Entity & Physics System
+## 4. Entity & Physics System (10:16 Viewport Calibrated)
 
-### Kinematics
-- **Gravity**: $g \approx 2500 \text{ px/s}^2$ (scaled to virtual resolution).
-- **Jump Impulse**: $v_y = -1100 \text{ px/s}$.
-- **Base Scroll Speed**: $v_x = 450 \text{ px/s}$.
-- **Super Mode Scroll Speed**: $v_{x,\text{super}} = 950 \text{ px/s}$.
+### Kinematics (Calibrated for $1080 \times 1728$ Workspace)
+- **Gravity**: $g \approx 3800\text{ px/s}^2$.
+- **Jump Impulse**: $v_y = -1600\text{ px/s}$.
+- **Base Scroll Speed**: $v_x = 550\text{ px/s}$.
+- **Super Mode Scroll Speed**: $v_{x,\text{super}} = 1100\text{ px/s}$.
 
-### Hitbox & Collision Detection
-- Entities define a **relative bounding box** smaller than their visual frame to avoid forgiving hitboxes (e.g., $80\%$ of visual width/height centered at anchor).
-- Collision detection utilizes pre-allocated `RectF.intersects(boxA, boxB)`.
+### Hitboxes & Collision Rules
+- Hitbox bounds are anchored around `originX` and `originY`.
+- Internal collision bounds apply an ~80% padding factor to prevent unfair visual edge-hits.
+- Handled via pre-allocated `RectF.intersects(boxA, boxB)` evaluations.
 
 ---
 
 ## 5. Development Guidelines for AI Agents
 
-1. **Pure Kotlin Focus**: Keep everything in clean, idiomatic Kotlin code. Do not introduce third-party native C++ or external game frameworks unless explicitly instructed.
-2. **Lifecycle Awareness**: Always release `SoundPool`, `MediaPlayer`, and `Bitmap` resources in `onDestroy()` / `surfaceDestroyed()`.
-3. **Single Responsibility Files**: Split entities into logical files (`Pooch.kt`, `ShyGuy.kt`, `Fudge.kt`, `ParallaxBackground.kt`, `SoundManager.kt`, `SpriteAtlas.kt`).
-4. **Resolution Independence**: Express physics and rendering using floating-point virtual coordinates.
+1. **No OpenGL ES / Legacy APIs**: Use `SurfaceHolder.lockHardwareCanvas()` exclusively for graphics output. Since Min API is 31 (Android 12+), directly utilize modern Android APIs without legacy `SDK_INT` version checks.
+2. **Dynamic Delta-Time Physics**: Always scale movement, gravity, and animations by elapsed delta time $\Delta t$ in seconds (`positionY += velocityY * dt`).
+3. **Strict Zero-Allocation Frame Loop**: Maintain zero memory allocations per frame within `update()` and `draw()`.
+4. **Pure Kotlin Architecture**: Maintain clean, idiomatic Kotlin code utilizing standard `Canvas` and `Paint` pipelines without external game engine dependencies.
+5. **Lifecycle Hygiene**: Explicitly stop threads, release `SoundPool` resources, stop `MediaPlayer` streams, and safely finalize surface operations inside `surfaceDestroyed()` / `onPause()`.
 
 ---
 
@@ -126,9 +156,9 @@ This document specifies the architecture, coding rules, asset pipelines, game me
   - [x] Fudge collectible sprite
   - [x] Hearts UI icons
   - [ ] Tap to start text rendering / bitmap font asset
-- [x] Background Graphic
+- [x] Background Graphic (Landscape)
 - [x] Sprite Editor (External tool setup)
-- [ ] Sprite Maps (JSON atlas coordinates for frames & pivots)
+- [ ] Multi-Atlas JSON Parser (`id`, `x`, `y`, `width`, `height`, `originX`, `originY` for each sheet)
 - [ ] Sound & Audio Assets
   - [ ] Bark / Arf sound (`pooch_bark.wav`)
   - [ ] Sad puppy whimper (`pooch_hurt.wav`)
@@ -140,31 +170,32 @@ This document specifies the architecture, coding rules, asset pipelines, game me
   - [ ] Super mode high-octane BGM track (`bg_super.ogg`)
 
 ### Phase 2: Engine Core & Lifecycle
-- [ ] Android App Skeleton (Fullscreen `ComponentActivity` / `Activity`, hides system bars)
-- [ ] Initial Engine Thread & Touch Input Handler
-- [ ] Sprite Map JSON Loader & Frame Renderer
-- [ ] Parallax Background Loader & Infinite Scrolling Loop
+- [ ] Android App Skeleton (Min API 31, Target API 36, Portrait full-screen activity)
+- [ ] Game Loop Thread with `lockHardwareCanvas()`, $60\text{ FPS}$ / $30\text{ FPS}$ frame pacing & $\Delta t$ timing
+- [ ] Touch Input Handler (Tap to jump trigger)
+- [ ] Multi-Sprite Atlas Loader & Origin-aware Frame Renderer
+- [ ] Landscape Background Loader with 10:16 Crop Viewport & Infinite Scroll Loop
 
 ### Phase 3: Gameplay & Character Kinematics
 - [ ] Scene State Controller (`TOUCH_TO_START` vs `PLAYING`)
-- [ ] Pooch Run Animation Controller
+- [ ] Pooch Run Animation Controller (indexed frame lookup)
 - [ ] Jump Physics & Jump Animation Trigger
 - [ ] AABB Hitboxes & Visual Debug Draw Toggles
-- [ ] Enemy & Collectible Spawner (Shy Guys & Fudges)
+- [ ] Obstacle & Collectible Spawner (Shy Guys & Fudges)
 
 ### Phase 4: UI, Counters & Power-ups
 - [ ] Fudge Counter UI Display
 - [ ] HP Hearts Counter UI Display (3 Hearts max)
-- [ ] Hurt Animation & Temporary Invincibility Frames
+- [ ] Hurt Animation & Invincibility Frames
 - [ ] Shy Guy Hurt / Stun Animation
-- [ ] Power-Up State Engine:
+- [ ] Super Mode State Machine:
   - Trigger at 10 Fudges
-  - Character scale-up transition & high speed
-  - Towers spawning (Fudge/Shy Guy stacks)
-  - 5-second timer & reversion state
+  - Character scale-up (1.8x - 2.0x) & speed boost
+  - Tower spawning (Fudge/Shy Guy stacks)
+  - 5-second timer & smooth scale-down transition
 - [ ] Shy Guys Smashed Counter UI
 
 ### Phase 5: Game Over & Polish
-- [ ] Game Over Mario-style Death Animation (Jump up + gravity fall out of screen)
-- [ ] Sound Manager Integration (BGM switching, SFX playback)
-- [ ] Final Frame Budget & Memory Allocation Audit
+- [ ] Game Over Mario-style Death Animation (Upward pop + downward gravity fall out of portrait screen)
+- [ ] Sound Manager Integration (BGM switching, low-latency SFX)
+- [ ] Frame Budget & Zero-Allocation Memory Audit ($60\text{ FPS}$ / $30\text{ FPS}$)
