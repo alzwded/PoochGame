@@ -86,6 +86,7 @@ class GameEngine(private val context: Context) {
 
         loadAssets()
         resetPlayer()
+        SoundManager.playMainBgm()
     }
 
     /**
@@ -142,6 +143,7 @@ class GameEngine(private val context: Context) {
             GameState.TOUCH_TO_START -> {
                 state = GameState.PLAYING
                 resetPlayer()
+                SoundManager.playMainBgm()
                 Log.d(TAG, "Tap → PLAYING")
             }
             GameState.PLAYING, GameState.SUPER_MODE -> {

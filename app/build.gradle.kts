@@ -31,6 +31,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
+    androidResources {
+        noCompress.addAll(listOf("m4a", "wav", "mp3", "ogg"))
+    }
+
     testOptions {
         unitTests.isReturnDefaultValues = true
     }

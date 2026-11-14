@@ -6,6 +6,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import alzwded.poochgame.engine.GameSurfaceView
+import alzwded.poochgame.engine.SoundManager
 
 /**
  * Main (and only) Activity for Pooch Runner.
@@ -21,6 +22,9 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Initialize audio engine
+        SoundManager.init(this)
+
         // Create and set the game surface as the content view
         gameSurfaceView = GameSurfaceView(this)
         setContentView(gameSurfaceView)
@@ -33,11 +37,18 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         setupImmersiveMode()
         gameSurfaceView.resume()
+        SoundManager.resumeBgm()
     }
 
     override fun onPause() {
         super.onPause()
         gameSurfaceView.pause()
+        SoundManager.pauseBgm()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        SoundManager.release()
     }
 
     /**
