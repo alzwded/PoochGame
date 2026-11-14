@@ -11,7 +11,7 @@
     "threshold": 41
   },
   {
-    "id": "walk_1",
+    "id": "walk_3",
     "x": 288,
     "y": 121,
     "width": 206,
@@ -22,7 +22,7 @@
     "threshold": 41
   },
   {
-    "id": "walk_2",
+    "id": "walk_4",
     "x": 539,
     "y": 109,
     "width": 206,
@@ -33,7 +33,7 @@
     "threshold": 38
   },
   {
-    "id": "walk_3",
+    "id": "walk_1",
     "x": 22,
     "y": 322,
     "width": 219,
@@ -44,7 +44,7 @@
     "threshold": 36
   },
   {
-    "id": "walk_4",
+    "id": "walk_2",
     "x": 285,
     "y": 319,
     "width": 213,
