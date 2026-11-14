@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sprite Sheet Carver & Editor</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Transparent checkerboard background pattern */
+        .bg-checkerboard {
+            background-color: #1e293b;
+            background-image: 
+                linear-gradient(45deg, #0f172a 25%, transparent 25%), 
+                linear-gradient(-45deg, #0f172a 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #0f172a 75%), 
+                linear-gradient(-45deg, transparent 75%, #0f172a 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+
+        /* Prevent default browser touch gestures on main canvas viewport */
+        #mainCanvas, #canvasWrapper {
+            touch-action: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased select-none">
+
+    <!-- Header -->
+    <header class="bg-slate-900 border-b border-slate-800 px-3 sm:px-6 py-2.5 sm:py-3 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 shrink-0 shadow-md">
+        <div class="flex items-center space-x-3">
+            <div class="bg-gradient-to-tr from-indigo-500 to-pink-500 p-2 rounded-lg text-white shadow-lg shadow-indigo-500/20 shrink-0">
+                <i class="fa-solid font-bold fa-scissors text-lg sm:text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-base sm:text-lg font-bold tracking-wide text-slate-100 flex items-center gap-2">
+                    Sprite Sheet Carver <span class="text-[10px] sm:text-xs bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full">v1.1</span>
+                </h1>
+                <p class="text-[11px] sm:text-xs text-slate-400">Upload sprite sheets, define origin points, chroma key backgrounds & export JSON</p>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-between sm:justify-end gap-2 flex-wrap">
+            <label class="cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg transition-all flex items-center gap-1.5 shadow-lg shadow-indigo-600/30">
+                <i class="fa-solid fa-upload"></i> <span>Upload</span>
+                <input type="file" id="imageInput" accept="image/*" class="hidden">
+            </label>
+            <button id="loadSampleBtn" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-all flex items-center gap-1.5">
+                <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i> Demo
+            </button>
+            <button id="exportJsonBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-all flex items-center gap-1.5 shadow-md">
+                <i class="fa-solid fa-download"></i> JSON
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col lg:grid lg:grid-cols-12 gap-3 sm:gap-4 p-2 sm:p-4 overflow-y-auto lg:overflow-hidden lg:h-[calc(100vh-14rem)]">
+        
+        <!-- Left Panel: Sprite Sheet Viewport & Canvas Controls (7 cols) -->
+        <section class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow-xl min-h-[380px] h-[55vh] lg:h-full">
+            <!-- Viewport Toolbar -->
+            <div class="bg-slate-800/80 border-b border-slate-700/60 p-2 sm:p-3 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                
+                <!-- Target Mode Switcher -->
+                <div class="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs flex-wrap gap-1">
+                    <button id="modeBoxBtn" class="px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-semibold rounded-md transition-all flex items-center gap-1 bg-indigo-600 text-white shadow">
+                        <i class="fa-regular fa-square"></i> 1. Box
+                    </button>
+                    <button id="modeOriginBtn" class="px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-semibold rounded-md transition-all flex items-center gap-1 text-slate-400 hover:text-slate-200">
+                        <i class="fa-solid fa-crosshairs text-pink-500"></i> 2. Origin O(0,0)
+                    </button>
+                    <button id="modePanBtn" class="px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-semibold rounded-md transition-all flex items-center gap-1 text-slate-400 hover:text-slate-200">
+                        <i class="fa-solid fa-hand text-amber-400"></i> 3. Pan
+                    </button>
+                </div>
+
+                <!-- Active Sprite Inputs -->
+                <div class="flex items-center gap-1.5 sm:gap-2 bg-slate-950 px-2 sm:px-3 py-1 rounded-lg border border-slate-800 text-[11px] sm:text-xs flex-wrap">
+                    <span class="text-slate-400 font-medium">Box:</span>
+                    <label class="text-slate-500">W:</label>
+                    <input type="number" id="inputW" class="w-10 sm:w-12 bg-slate-800 border border-slate-700 rounded px-1 text-center text-slate-200" min="1" value="32">
+                    <label class="text-slate-500">H:</label>
+                    <input type="number" id="inputH" class="w-10 sm:w-12 bg-slate-800 border border-slate-700 rounded px-1 text-center text-slate-200" min="1" value="32">
+                    <span class="text-slate-700">|</span>
+                    <span class="text-pink-400 font-medium">O:</span>
+                    <label class="text-slate-500">X:</label>
+                    <input type="number" id="inputOX" class="w-10 sm:w-12 bg-slate-800 border border-slate-700 rounded px-1 text-center text-pink-300" value="16">
+                    <label class="text-slate-500">Y:</label>
+                    <input type="number" id="inputOY" class="w-10 sm:w-12 bg-slate-800 border border-slate-700 rounded px-1 text-center text-pink-300" value="32">
+                </div>
+
+                <!-- Zoom Controls -->
+                <div class="flex items-center gap-1 text-xs bg-slate-950 p-1 rounded-lg border border-slate-800">
+                    <button id="zoomOutBtn" class="p-1 sm:p-1.5 text-slate-400 hover:text-white rounded"><i class="fa-solid fa-minus"></i></button>
+                    <span id="zoomVal" class="w-9 sm:w-10 text-center font-mono text-slate-300 text-[11px] sm:text-xs">100%</span>
+                    <button id="zoomInBtn" class="p-1 sm:p-1.5 text-slate-400 hover:text-white rounded"><i class="fa-solid fa-plus"></i></button>
+                    <button id="zoomResetBtn" class="px-1.5 sm:px-2 py-0.5 text-slate-400 hover:text-white border-l border-slate-800 text-[11px]">Reset</button>
+                </div>
+            </div>
+
+            <!-- Canvas Container (Fixed Panning: Allows full 360° scroll without left/top clipping) -->
+            <div id="viewportContainer" class="flex-1 bg-checkerboard relative overflow-auto cursor-crosshair">
+                <div id="canvasWrapper" class="min-w-full min-h-full p-8 flex flex-col">
+                    <canvas id="mainCanvas" class="block rounded border border-slate-700/50 shadow-2xl transition-all duration-75 m-auto shrink-0"></canvas>
+                </div>
+            </div>
+
+            <!-- Canvas Footer / Instructions -->
+            <div class="bg-slate-950 px-3 sm:px-4 py-1.5 sm:py-2 border-t border-slate-800 flex items-center justify-between text-[10px] sm:text-[11px] text-slate-400 shrink-0 flex-wrap gap-1">
+                <div id="statusText" class="flex items-center gap-2">
+                    <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span> 
+                    <span><strong>Controls:</strong> 1-finger Pan (Pan tool) or drag handles. 2-finger pinch zoom.</span>
+                </div>
+                <div id="dimensionsInfo" class="font-mono text-slate-500">0 x 0 px</div>
+            </div>
+        </section>
+
+        <!-- Right Panel: Live JSON Textarea & Auto-Grid Slicer (5 cols) -->
+        <section class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow-xl min-h-[300px]">
+            <!-- Header Tab Bar -->
+            <div class="bg-slate-800/80 border-b border-slate-700/60 px-3 sm:px-4 py-2 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-code text-indigo-400"></i>
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300">Sprite Definitions (JSON)</h2>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <button id="formatJsonBtn" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2 py-1 rounded transition-all">
+                        <i class="fa-solid fa-align-left"></i> Format
+                    </button>
+                    <button id="applyJsonBtn" class="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded transition-all font-semibold shadow">
+                        <i class="fa-solid fa-check"></i> Apply
+                    </button>
+                </div>
+            </div>
+
+            <!-- JSON Textarea -->
+            <div class="flex-1 p-2 sm:p-3 bg-slate-950 relative flex flex-col min-h-[140px]">
+                <textarea id="jsonTextArea" spellcheck="false" class="w-full flex-1 bg-slate-900 text-slate-200 font-mono text-xs p-3 rounded-lg border border-slate-800 focus:outline-none focus:border-indigo-500 resize-none leading-relaxed" placeholder="// Sprite definitions will appear here in JSON format..."></textarea>
+                <div id="jsonError" class="hidden absolute bottom-5 left-5 right-5 bg-rose-950/90 border border-rose-600/50 text-rose-200 px-3 py-2 rounded text-xs shadow-lg backdrop-blur-sm">
+                    <i class="fa-solid fa-triangle-exclamation mr-1.5 text-rose-400"></i> <span id="jsonErrorMsg">Invalid JSON syntax</span>
+                </div>
+            </div>
+
+            <!-- Quick Utilities (Auto Grid Slicer) -->
+            <div class="p-2.5 sm:p-3 bg-slate-900 border-t border-slate-800 shrink-0">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
+                        <i class="fa-solid fa-table-cells text-indigo-400"></i> Auto-Grid Generator
+                    </span>
+                    <button id="generateGridBtn" class="text-xs bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded font-medium transition-all">
+                        Build Grid
+                    </button>
+                </div>
+                <div class="grid grid-cols-4 gap-1.5 sm:gap-2 text-xs">
+                    <div>
+                        <label class="block text-[10px] text-slate-500">Columns</label>
+                        <input type="number" id="gridCols" class="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 sm:py-1 text-slate-200" value="4" min="1">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-slate-500">Rows</label>
+                        <input type="number" id="gridRows" class="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 sm:py-1 text-slate-200" value="2" min="1">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-slate-500">Frame W</label>
+                        <input type="number" id="gridW" class="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 sm:py-1 text-slate-200" value="32" min="1">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-slate-500">Frame H</label>
+                        <input type="number" id="gridH" class="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 sm:py-1 text-slate-200" value="32" min="1">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Bottom Dock: Sprite Previewer & Navigator (Responsive Flex Reflow) -->
+    <footer class="bg-slate-900 border-t border-slate-800 p-2.5 sm:p-4 flex flex-col gap-3 shrink-0 shadow-2xl relative z-10">
+        <div class="flex flex-wrap items-center justify-between gap-2 sm:gap-4">
+            <!-- Left Controls & Title -->
+            <div class="flex flex-wrap items-center gap-2 sm:gap-4">
+                <div class="flex items-center gap-1.5">
+                    <div class="w-2.5 h-2.5 rounded-full bg-pink-500 animate-pulse"></div>
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300">Preview & Keyer</h3>
+                </div>
+
+                <!-- Navigation Controls -->
+                <div class="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+                    <button id="prevSpriteBtn" title="Previous Sprite" class="px-2 py-0.5 sm:px-2.5 sm:py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 rounded transition-all">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </button>
+                    <span id="spriteIndexLabel" class="text-xs font-mono px-2 text-slate-300 font-bold">0 / 0</span>
+                    <button id="nextSpriteBtn" title="Next Sprite" class="px-2 py-0.5 sm:px-2.5 sm:py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 rounded transition-all">
+                        <i class="fa-solid fa-chevron-right"></i>
+                    </button>
+                </div>
+
+                <!-- Sprite Action Buttons -->
+                <div class="flex items-center gap-1.5">
+                    <button id="addSpriteBtn" class="text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg transition-all flex items-center gap-1 shadow">
+                        <i class="fa-solid fa-plus"></i> <span class="hidden sm:inline">Add</span>
+                    </button>
+                    <button id="cloneSpriteBtn" class="text-xs bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 border border-indigo-700/50 font-semibold px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg transition-all flex items-center gap-1 shadow">
+                        <i class="fa-regular fa-copy"></i> <span class="hidden sm:inline">Clone</span>
+                    </button>
+                    <button id="deleteSpriteBtn" class="text-xs bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-800/60 font-semibold px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg transition-all flex items-center gap-1">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Chroma Key Controls (Reflowable on phone screens) -->
+            <div class="flex flex-wrap items-center gap-2 sm:gap-4 bg-slate-950 px-2.5 py-1.5 rounded-lg border border-slate-800 text-xs">
+                <div class="flex items-center gap-1.5">
+                    <input type="checkbox" id="chromaKeyToggle" checked class="accent-indigo-500 rounded cursor-pointer">
+                    <label for="chromaKeyToggle" class="text-[11px] sm:text-xs font-semibold text-slate-300 cursor-pointer">Chroma Key</label>
+                </div>
+                <div class="flex items-center gap-1.5 sm:border-l sm:border-slate-800 sm:pl-3">
+                    <span class="text-[10px] sm:text-[11px] text-slate-400">Color:</span>
+                    <input type="color" id="chromaColorInput" value="#ffffff" title="Pick Chroma Key Color" class="w-6 h-6 rounded cursor-pointer bg-transparent border border-slate-700 p-0 overflow-hidden shrink-0">
+                    <button id="pickColorBtn" title="Sample color from screen" class="px-1.5 py-0.5 text-slate-400 hover:text-white bg-slate-900 border border-slate-800 rounded text-[11px] flex items-center gap-1">
+                        <i class="fa-solid fa-eye-dropper"></i>
+                    </button>
+                </div>
+                <div class="flex items-center gap-1.5 sm:border-l sm:border-slate-800 sm:pl-3">
+                    <span class="text-[10px] sm:text-[11px] text-slate-400">Thresh:</span>
+                    <input type="range" id="chromaThreshold" min="1" max="150" value="45" class="w-16 sm:w-20 accent-indigo-500 cursor-pointer">
+                    <span id="chromaThresholdVal" class="text-[11px] font-mono text-slate-400 w-6">45</span>
+                </div>
+                <div class="flex items-center gap-1.5 sm:border-l sm:border-slate-800 sm:pl-3">
+                    <input type="checkbox" id="showOriginMarker" checked class="accent-pink-500 rounded cursor-pointer">
+                    <label for="showOriginMarker" class="text-[11px] text-pink-300 font-semibold cursor-pointer">O Spot</label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Preview Display Area -->
+        <div class="flex flex-col sm:flex-row items-center gap-3 sm:gap-6">
+            <!-- Large Zoomed Preview Canvas -->
+            <div class="w-24 h-24 sm:w-28 sm:h-28 bg-checkerboard rounded-xl border-2 border-indigo-500/40 relative flex items-center justify-center shrink-0 shadow-inner overflow-hidden">
+                <canvas id="previewCanvas" class="max-w-full max-h-full object-contain"></canvas>
+                <div class="absolute bottom-1 right-1 bg-slate-950/80 text-[9px] text-slate-400 px-1 py-0.5 rounded border border-slate-800 font-mono">
+                    4x Zoom
+                </div>
+            </div>
+
+            <!-- Sprite Metadata & Editing Fields -->
+            <div class="w-full flex-1 bg-slate-950 border border-slate-800 rounded-xl p-2.5 sm:p-3 flex flex-col gap-2">
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+                    <div class="col-span-2 sm:col-span-1 md:col-span-2">
+                        <label class="block text-[10px] text-slate-500 font-medium">Sprite Name / ID</label>
+                        <input type="text" id="spriteNameInput" class="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-indigo-300 font-bold focus:outline-none focus:border-indigo-500" value="sprite_0">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-slate-500">Position X</label>
+                        <input type="number" id="spriteXInput" class="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200" value="0">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-slate-500">Position Y</label>
+                        <input type="number" id="spriteYInput" class="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200" value="0">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-slate-500">Width</label>
+                        <input type="number" id="spriteWInput" class="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200" value="32">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-slate-500">Height</label>
+                        <input type="number" id="spriteHInput" class="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200" value="32">
+                    </div>
+                </div>
+
+                <!-- Quick Presets for Origin -->
+                <div class="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-slate-900 text-xs">
+                    <span class="text-[10px] text-slate-500 font-medium mr-1">Origin Alignment:</span>
+                    <button class="origin-preset-btn bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px]" data-ox="0" data-oy="0">Top-Left (0,0)</button>
+                    <button class="origin-preset-btn bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px]" data-ox="center" data-oy="center">Center</button>
+                    <button class="origin-preset-btn bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px]" data-ox="center" data-oy="bottom">Bottom-Center</button>
+                    <button class="origin-preset-btn bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px]" data-ox="0" data-oy="bottom">Bottom-Left</button>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed top-5 right-5 bg-indigo-600 text-white px-4 py-2.5 rounded-lg shadow-2xl transition-all duration-300 opacity-0 transform translate-y-[-10px] pointer-events-none z-50 flex items-center gap-2 text-xs font-semibold">
+        <i class="fa-solid fa-circle-check"></i> <span id="toastMsg">Notification</span>
+    </div>
+
+    <script>
+        /**
+         * SPRITE SHEET CARVER & EDITOR APP STATE & LOGIC
+         */
+        const state = {
+            image: null,
+            zoom: 1.0,
+            mode: 'box', // 'box', 'origin', or 'pan'
+            sprites: [],
+            selectedIndex: 0,
+            chromaKeyWhite: true,
+            chromaColor: '#ffffff',
+            chromaThreshold: 45,
+            showOriginMarker: true,
+            isDragging: false,
+            isPanning: false,
+            panStart: { x: 0, y: 0, scrollLeft: 0, scrollTop: 0 },
+            activeHandle: null, // 'top-left', 'right', 'bottom', 'bottom-right', 'move', 'origin', 'create'
+            dragStart: { x: 0, y: 0 },
+            initialSpriteState: null
+        };
+
+        // Touch Interaction State
+        let touchStartDist = 0;
+        let touchStartZoom = 1.0;
+        let isPinching = false;
+
+        // Canvas Elements
+        const mainCanvas = document.getElementById('mainCanvas');
+        const mainCtx = mainCanvas.getContext('2d');
+        const previewCanvas = document.getElementById('previewCanvas');
+        const previewCtx = previewCanvas.getContext('2d');
+        const canvasWrapper = document.getElementById('canvasWrapper');
+
+        // UI Controls
+        const imageInput = document.getElementById('imageInput');
+        const loadSampleBtn = document.getElementById('loadSampleBtn');
+        const exportJsonBtn = document.getElementById('exportJsonBtn');
+        const modeBoxBtn = document.getElementById('modeBoxBtn');
+        modeBoxBtn.title = "Click/drag on canvas to define sprite bounding square/rect";
+        const modeOriginBtn = document.getElementById('modeOriginBtn');
+        modeOriginBtn.title = "Click on sprite frame to set origin point O(0,0)";
+        const modePanBtn = document.getElementById('modePanBtn');
+        modePanBtn.title = "Drag anywhere on canvas to pan and navigate the sheet";
+        
+        const inputW = document.getElementById('inputW');
+        const inputH = document.getElementById('inputH');
+        const inputOX = document.getElementById('inputOX');
+        const inputOY = document.getElementById('inputOY');
+        
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const zoomResetBtn = document.getElementById('zoomResetBtn');
+        const zoomVal = document.getElementById('zoomVal');
+
+        const jsonTextArea = document.getElementById('jsonTextArea');
+        const applyJsonBtn = document.getElementById('applyJsonBtn');
+        const formatJsonBtn = document.getElementById('formatJsonBtn');
+        const jsonError = document.getElementById('jsonError');
+        const jsonErrorMsg = document.getElementById('jsonErrorMsg');
+
+        const prevSpriteBtn = document.getElementById('prevSpriteBtn');
+        const nextSpriteBtn = document.getElementById('nextSpriteBtn');
+        const addSpriteBtn = document.getElementById('addSpriteBtn');
+        const cloneSpriteBtn = document.getElementById('cloneSpriteBtn');
+        const deleteSpriteBtn = document.getElementById('deleteSpriteBtn');
+        const spriteIndexLabel = document.getElementById('spriteIndexLabel');
+
+        const spriteNameInput = document.getElementById('spriteNameInput');
+        const spriteXInput = document.getElementById('spriteXInput');
+        const spriteYInput = document.getElementById('spriteYInput');
+        const spriteWInput = document.getElementById('spriteWInput');
+        const spriteHInput = document.getElementById('spriteHInput');
+
+        const chromaKeyToggle = document.getElementById('chromaKeyToggle');
+        const chromaColorInput = document.getElementById('chromaColorInput');
+        const pickColorBtn = document.getElementById('pickColorBtn');
+        const chromaThreshold = document.getElementById('chromaThreshold');
+        const chromaThresholdVal = document.getElementById('chromaThresholdVal');
+        const showOriginMarker = document.getElementById('showOriginMarker');
+
+        const generateGridBtn = document.getElementById('generateGridBtn');
+
+        // Handle dimensions (in canvas pixel space)
+        const HANDLE_SIZE = 8;
+
+        // Initialize App
+        window.onload = () => {
+            initSampleSheet();
+            setupEventListeners();
+        };
+
+        // Load image file helper
+        function loadImageFile(file) {
+            if (!file || !file.type.startsWith('image/')) {
+                showToast("Please select a valid image file.");
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    state.image = img;
+                    state.sprites = [
+                        { 
+                            id: "sprite_0", 
+                            x: 0, 
+                            y: 0, 
+                            width: Math.min(64, img.width), 
+                            height: Math.min(64, img.height), 
+                            originX: Math.floor(Math.min(64, img.width) / 2), 
+                            originY: Math.min(64, img.height) 
+                        }
+                    ];
+                    state.selectedIndex = 0;
+                    updateApp();
+                    showToast("Sprite sheet loaded!");
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Initialize with default generated retro sample sheet
+        function initSampleSheet() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, 256, 256);
+
+            const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+            for(let r = 0; r < 4; r++) {
+                for(let c = 0; c < 4; c++) {
+                    const x = c * 64 + 16;
+                    const y = r * 64 + 16;
+                    const color = colors[(r * 4 + c) % colors.length];
+                    
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.arc(x + 16, y + 16, 14, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.fillStyle = '#000000';
+                    ctx.fillRect(x + 10, y + 10, 4, 4);
+                    ctx.fillRect(x + 22, y + 10, 4, 4);
+                    ctx.fillRect(x + 10, y + 20, 16, 3);
+                }
+            }
+
+            const img = new Image();
+            img.onload = () => {
+                state.image = img;
+                state.sprites = [
+                    { id: "hero_idle_0", x: 16, y: 16, width: 32, height: 32, originX: 16, originY: 32 },
+                    { id: "hero_idle_1", x: 80, y: 16, width: 32, height: 32, originX: 16, originY: 32 },
+                    { id: "hero_walk_0", x: 144, y: 16, width: 32, height: 32, originX: 16, originY: 32 },
+                    { id: "hero_walk_1", x: 208, y: 16, width: 32, height: 32, originX: 16, originY: 32 }
+                ];
+                state.selectedIndex = 0;
+                updateApp();
+            };
+            img.src = canvas.toDataURL();
+        }
+
+        // Set Mode Helper
+        function setMode(newMode) {
+            state.mode = newMode;
+            const activeBox = "px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-semibold rounded-md transition-all flex items-center gap-1 bg-indigo-600 text-white shadow";
+            const activeOrigin = "px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-semibold rounded-md transition-all flex items-center gap-1 bg-pink-600 text-white shadow";
+            const activePan = "px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-semibold rounded-md transition-all flex items-center gap-1 bg-amber-600 text-white shadow";
+            const inactive = "px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-semibold rounded-md transition-all flex items-center gap-1 text-slate-400 hover:text-slate-200";
+
+            modeBoxBtn.className = newMode === 'box' ? activeBox : inactive;
+            modeOriginBtn.className = newMode === 'origin' ? activeOrigin : inactive;
+            modePanBtn.className = newMode === 'pan' ? activePan : inactive;
+
+            if (newMode === 'box') {
+                showToast("Mode: Bounding Box (Drag/Resize)");
+            } else if (newMode === 'origin') {
+                showToast("Mode: Set Origin Spot O(0,0)");
+            } else if (newMode === 'pan') {
+                showToast("Mode: Pan Canvas (Drag to Scroll)");
+            }
+            updateCanvasCursor();
+        }
+
+        // Canvas Zoom Helper (Uses native pixel styling to allow smooth 360-degree panning without left/top clipping)
+        function setZoom(newZoom) {
+            state.zoom = Math.max(0.25, Math.min(4.0, newZoom));
+            if (state.image && mainCanvas.width > 0) {
+                mainCanvas.style.width = Math.round(mainCanvas.width * state.zoom) + 'px';
+                mainCanvas.style.height = Math.round(mainCanvas.height * state.zoom) + 'px';
+            }
+            zoomVal.textContent = `${Math.round(state.zoom * 100)}%`;
+        }
+
+        // Set up event listeners
+        function setupEventListeners() {
+            // Image Upload via Input Button
+            imageInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    loadImageFile(file);
+                }
+                e.target.value = ''; // Reset input value so selecting the same file triggers change again
+            });
+
+            // Drag & Drop Image directly onto viewport
+            const viewport = document.getElementById('viewportContainer');
+            ['dragenter', 'dragover'].forEach(evtName => {
+                viewport.addEventListener(evtName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    viewport.classList.add('ring-2', 'ring-indigo-500');
+                });
+            });
+
+            ['dragleave', 'drop'].forEach(evtName => {
+                viewport.addEventListener(evtName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    viewport.classList.remove('ring-2', 'ring-indigo-500');
+                });
+            });
+
+            viewport.addEventListener('drop', (e) => {
+                const file = e.dataTransfer.files[0];
+                if (file) {
+                    loadImageFile(file);
+                }
+            });
+
+            loadSampleBtn.addEventListener('click', () => {
+                initSampleSheet();
+                showToast("Demo sprite sheet reloaded!");
+            });
+
+            // Mode Switching
+            modeBoxBtn.addEventListener('click', () => setMode('box'));
+            modeOriginBtn.addEventListener('click', () => setMode('origin'));
+            modePanBtn.addEventListener('click', () => setMode('pan'));
+
+            // Input fields sync
+            const inputs = [
+                { el: inputW, prop: 'width' },
+                { el: inputH, prop: 'height' },
+                { el: inputOX, prop: 'originX' },
+                { el: inputOY, prop: 'originY' },
+                { el: spriteXInput, prop: 'x' },
+                { el: spriteYInput, prop: 'y' },
+                { el: spriteWInput, prop: 'width' },
+                { el: spriteHInput, prop: 'height' }
+            ];
+
+            inputs.forEach(({ el, prop }) => {
+                el.addEventListener('input', () => {
+                    if (state.sprites.length === 0) return;
+                    const val = parseInt(el.value) || 0;
+                    state.sprites[state.selectedIndex][prop] = val;
+                    syncInputFields();
+                    renderAll();
+                    updateJsonTextArea();
+                });
+            });
+
+            spriteNameInput.addEventListener('input', () => {
+                if (state.sprites.length === 0) return;
+                state.sprites[state.selectedIndex].id = spriteNameInput.value;
+                updateJsonTextArea();
+            });
+
+            // Zooming
+            zoomInBtn.addEventListener('click', () => setZoom(state.zoom + 0.25));
+            zoomOutBtn.addEventListener('click', () => setZoom(state.zoom - 0.25));
+            zoomResetBtn.addEventListener('click', () => setZoom(1.0));
+
+            // Main Canvas Mouse Interactions
+            mainCanvas.addEventListener('mousedown', onCanvasMouseDown);
+            mainCanvas.addEventListener('mousemove', onCanvasMouseMove);
+            window.addEventListener('mouseup', onCanvasMouseUp);
+
+            // Main Canvas Touch Interactions (1-finger drag handles, 2-finger pan & pinch zoom)
+            mainCanvas.addEventListener('touchstart', onTouchStart, { passive: false });
+            mainCanvas.addEventListener('touchmove', onTouchMove, { passive: false });
+            mainCanvas.addEventListener('touchend', onTouchEnd);
+            mainCanvas.addEventListener('touchcancel', onTouchEnd);
+
+            // Sprite Navigation
+            prevSpriteBtn.addEventListener('click', () => {
+                if (state.sprites.length === 0) return;
+                state.selectedIndex = (state.selectedIndex - 1 + state.sprites.length) % state.sprites.length;
+                updateApp();
+            });
+
+            nextSpriteBtn.addEventListener('click', () => {
+                if (state.sprites.length === 0) return;
+                state.selectedIndex = (state.selectedIndex + 1) % state.sprites.length;
+                updateApp();
+            });
+
+            addSpriteBtn.addEventListener('click', addNewSprite);
+            cloneSpriteBtn.addEventListener('click', cloneCurrentSprite);
+            deleteSpriteBtn.addEventListener('click', deleteCurrentSprite);
+
+            // Origin Quick Presets
+            document.querySelectorAll('.origin-preset-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    if (state.sprites.length === 0) return;
+                    const sprite = state.sprites[state.selectedIndex];
+                    const oxType = e.target.getAttribute('data-ox');
+                    const oyType = e.target.getAttribute('data-oy');
+
+                    if (oxType === 'center') sprite.originX = Math.round(sprite.width / 2);
+                    else sprite.originX = parseInt(oxType) || 0;
+
+                    if (oyType === 'center') sprite.originY = Math.round(sprite.height / 2);
+                    else if (oyType === 'bottom') sprite.originY = sprite.height;
+                    else sprite.originY = parseInt(oyType) || 0;
+
+                    syncInputFields();
+                    renderAll();
+                    updateJsonTextArea();
+                });
+            });
+
+            // JSON Action Buttons
+            applyJsonBtn.addEventListener('click', parseAndApplyJson);
+            formatJsonBtn.addEventListener('click', () => {
+                try {
+                    const parsed = JSON.parse(jsonTextArea.value);
+                    jsonTextArea.value = JSON.stringify(parsed, null, 2);
+                    jsonError.classList.add('hidden');
+                } catch(err) {
+                    jsonErrorMsg.textContent = err.message;
+                    jsonError.classList.remove('hidden');
+                }
+            });
+            exportJsonBtn.addEventListener('click', copyJsonToClipboard);
+
+            // Chroma Key & Preview Controls
+            chromaKeyToggle.addEventListener('change', (e) => {
+                state.chromaKeyWhite = e.target.checked;
+                renderPreview();
+            });
+
+            chromaColorInput.addEventListener('input', (e) => {
+                state.chromaColor = e.target.value;
+                renderPreview();
+            });
+
+            pickColorBtn.addEventListener('click', async () => {
+                if ('EyeDropper' in window) {
+                    try {
+                        const eyeDropper = new EyeDropper();
+                        const result = await eyeDropper.open();
+                        if (result && result.sRGBHex) {
+                            state.chromaColor = result.sRGBHex;
+                            chromaColorInput.value = result.sRGBHex;
+                            renderPreview();
+                            showToast(`Color picked: ${result.sRGBHex}`);
+                        }
+                    } catch (e) {
+                        // User canceled eyedropper
+                    }
+                } else {
+                    showToast("Click the color palette square to select a color!");
+                }
+            });
+
+            chromaThreshold.addEventListener('input', (e) => {
+                state.chromaThreshold = parseInt(e.target.value) || 45;
+                chromaThresholdVal.textContent = state.chromaThreshold;
+                renderPreview();
+            });
+
+            showOriginMarker.addEventListener('change', (e) => {
+                state.showOriginMarker = e.target.checked;
+                renderPreview();
+            });
+
+            // Grid Slicer
+            generateGridBtn.addEventListener('click', generateAutoGrid);
+        }
+
+        // Mouse & Touch canvas coords calculation
+        function getCanvasCoords(e) {
+            const touch = (e.touches && e.touches.length > 0) ? e.touches[0] : (e.changedTouches && e.changedTouches.length > 0 ? e.changedTouches[0] : e);
+            const rect = mainCanvas.getBoundingClientRect();
+            const scaleX = mainCanvas.width / rect.width;
+            const scaleY = mainCanvas.height / rect.height;
+            return {
+                x: Math.floor((touch.clientX - rect.left) * scaleX),
+                y: Math.floor((touch.clientY - rect.top) * scaleY)
+            };
+        }
+
+        // Touch Helpers for 2-finger distance calculation
+        function getTouchDistance(t1, t2) {
+            const dx = t1.clientX - t2.clientX;
+            const dy = t1.clientY - t2.clientY;
+            return Math.hypot(dx, dy);
+        }
+
+        // Touch Event Handlers
+        function onTouchStart(e) {
+            if (!state.image) return;
+
+            if (e.touches.length >= 2) {
+                // 2-Finger Touch: Pure Pinch Zoom (isolates zoom from panning)
+                e.preventDefault();
+                isPinching = true;
+                state.isPanning = false;
+                state.isDragging = false;
+                state.activeHandle = null;
+
+                touchStartDist = getTouchDistance(e.touches[0], e.touches[1]);
+                touchStartZoom = state.zoom;
+                return;
+            }
+
+            if (e.touches.length === 1 && !isPinching) {
+                e.preventDefault();
+                onCanvasMouseDown(e, true);
+            }
+        }
+
+        function onTouchMove(e) {
+            if (!state.image) return;
+
+            if (e.touches.length >= 2 && isPinching) {
+                e.preventDefault();
+                const currentDist = getTouchDistance(e.touches[0], e.touches[1]);
+
+                // 2-Finger Pure Pinch Zoom
+                if (touchStartDist > 0) {
+                    const scale = currentDist / touchStartDist;
+                    setZoom(touchStartZoom * scale);
+                }
+                return;
+            }
+
+            if (e.touches.length === 1 && !isPinching) {
+                e.preventDefault();
+                if (state.isPanning || state.isDragging) {
+                    onCanvasMouseMove(e);
+                }
+            }
+        }
+
+        function onTouchEnd(e) {
+            if (e.touches.length < 2) {
+                isPinching = false;
+            }
+            if (e.touches.length === 0) {
+                onCanvasMouseUp();
+            } else if (e.touches.length === 1) {
+                // Prevent gesture jump when transitioning from 2 fingers to 1 finger
+                state.isPanning = false;
+                state.isDragging = false;
+            }
+        }
+
+        // Detect handle hit under canvas coordinates with expanded hit tolerance for touch screens
+        function hitTestSprite(coords, isTouch = false) {
+            if (state.sprites.length === 0) return { handle: null };
+            const curr = state.sprites[state.selectedIndex];
+            
+            // Expand touch target tolerance so fingers can comfortably grab handles
+            const touchBonus = isTouch ? 18 : 4;
+            const hs = Math.max(HANDLE_SIZE, Math.round((HANDLE_SIZE + touchBonus) / state.zoom));
+
+            const x = curr.x;
+            const y = curr.y;
+            const w = curr.width;
+            const h = curr.height;
+
+            // Handle positions
+            // Top-Left Drag Handle
+            if (Math.abs(coords.x - x) <= hs && Math.abs(coords.y - y) <= hs) {
+                return { handle: 'top-left' };
+            }
+            // Right Resize Handle
+            if (Math.abs(coords.x - (x + w)) <= hs && Math.abs(coords.y - (y + h / 2)) <= hs) {
+                return { handle: 'right' };
+            }
+            // Bottom Resize Handle
+            if (Math.abs(coords.x - (x + w / 2)) <= hs && Math.abs(coords.y - (y + h)) <= hs) {
+                return { handle: 'bottom' };
+            }
+            // Bottom-Right Corner Resize Handle
+            if (Math.abs(coords.x - (x + w)) <= hs && Math.abs(coords.y - (y + h)) <= hs) {
+                return { handle: 'bottom-right' };
+            }
+            // Inside Bounding Box Drag
+            if (coords.x >= x && coords.x <= x + w && coords.y >= y && coords.y <= y + h) {
+                return { handle: 'move' };
+            }
+
+            return { handle: null };
+        }
+
+        function updateCanvasCursor(e) {
+            if (state.isDragging || !state.image) return;
+
+            if (state.mode === 'pan') {
+                mainCanvas.style.cursor = state.isPanning ? 'grabbing' : 'grab';
+                return;
+            }
+
+            if (e && (e.touches && e.touches.length > 0)) return;
+            const coords = e ? getCanvasCoords(e) : { x: 0, y: 0 };
+            
+            if (state.mode === 'origin') {
+                mainCanvas.style.cursor = 'crosshair';
+                return;
+            }
+
+            if (state.sprites.length === 0) {
+                mainCanvas.style.cursor = 'crosshair';
+                return;
+            }
+
+            const hit = hitTestSprite(coords, false);
+            switch (hit.handle) {
+                case 'top-left':
+                case 'move':
+                    mainCanvas.style.cursor = 'move';
+                    break;
+                case 'right':
+                    mainCanvas.style.cursor = 'ew-resize';
+                    break;
+                case 'bottom':
+                    mainCanvas.style.cursor = 'ns-resize';
+                    break;
+                case 'bottom-right':
+                    mainCanvas.style.cursor = 'nwse-resize';
+                    break;
+                default:
+                    mainCanvas.style.cursor = 'crosshair';
+                    break;
+            }
+        }
+
+        function onCanvasMouseDown(e, isTouch = false) {
+            if (!state.image) return;
+
+            if (state.mode === 'pan') {
+                state.isPanning = true;
+                const clientX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+                const clientY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+                const viewport = document.getElementById('viewportContainer');
+                state.panStart = {
+                    x: clientX,
+                    y: clientY,
+                    scrollLeft: viewport.scrollLeft,
+                    scrollTop: viewport.scrollTop
+                };
+                mainCanvas.style.cursor = 'grabbing';
+                return;
+            }
+
+            if (state.sprites.length === 0) return;
+            const coords = getCanvasCoords(e);
+            const activeSprite = state.sprites[state.selectedIndex];
+
+            state.isDragging = true;
+            state.dragStart = coords;
+            state.initialSpriteState = { ...activeSprite };
+
+            if (state.mode === 'origin') {
+                state.activeHandle = 'origin';
+                activeSprite.originX = coords.x - activeSprite.x;
+                activeSprite.originY = coords.y - activeSprite.y;
+            } else {
+                const hit = hitTestSprite(coords, isTouch);
+                state.activeHandle = hit.handle || 'create';
+
+                if (state.activeHandle === 'create') {
+                    // Start placing box at clicked point
+                    activeSprite.x = coords.x;
+                    activeSprite.y = coords.y;
+                }
+            }
+
+            syncInputFields();
+            renderAll();
+            updateJsonTextArea();
+        }
+
+        function onCanvasMouseMove(e) {
+            if (state.isPanning) {
+                const clientX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+                const clientY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+                const dx = clientX - state.panStart.x;
+                const dy = clientY - state.panStart.y;
+                const viewport = document.getElementById('viewportContainer');
+                viewport.scrollLeft = state.panStart.scrollLeft - dx;
+                viewport.scrollTop = state.panStart.scrollTop - dy;
+                return;
+            }
+
+            updateCanvasCursor(e);
+
+            if (!state.isDragging || !state.image) return;
+            const coords = getCanvasCoords(e);
+            const activeSprite = state.sprites[state.selectedIndex];
+            const init = state.initialSpriteState;
+            const dx = coords.x - state.dragStart.x;
+            const dy = coords.y - state.dragStart.y;
+
+            if (state.mode === 'origin' || state.activeHandle === 'origin') {
+                activeSprite.originX = coords.x - activeSprite.x;
+                activeSprite.originY = coords.y - activeSprite.y;
+            } else {
+                switch (state.activeHandle) {
+                    case 'top-left':
+                    case 'move':
+                        // Move top-left corner / entire bounding box
+                        activeSprite.x = Math.max(0, init.x + dx);
+                        activeSprite.y = Math.max(0, init.y + dy);
+                        break;
+                    case 'right':
+                        // Resize Width
+                        if (init.width + dx > 1) {
+                            activeSprite.width = init.width + dx;
+                        }
+                        break;
+                    case 'bottom':
+                        // Resize Height
+                        if (init.height + dy > 1) {
+                            activeSprite.height = init.height + dy;
+                        }
+                        break;
+                    case 'bottom-right':
+                        // Corner Resize Width & Height
+                        if (init.width + dx > 1) activeSprite.width = init.width + dx;
+                        if (init.height + dy > 1) activeSprite.height = init.height + dy;
+                        break;
+                    case 'create':
+                    default:
+                        // Dragging out box dimension
+                        const w = coords.x - activeSprite.x;
+                        const h = coords.y - activeSprite.y;
+                        if (w > 0) activeSprite.width = w;
+                        if (h > 0) activeSprite.height = h;
+                        break;
+                }
+            }
+
+            syncInputFields();
+            renderAll();
+            updateJsonTextArea();
+        }
+
+        function onCanvasMouseUp() {
+            if (state.isPanning) {
+                state.isPanning = false;
+                updateCanvasCursor();
+            }
+            state.isDragging = false;
+            state.activeHandle = null;
+        }
+
+        // Helper to generate unique sprite_N or prefix_N ID without duplicate _copy suffixes
+        function getUniqueSpriteName(baseName = 'sprite_0') {
+            const existingIds = new Set(state.sprites.map(s => s.id));
+            let clean = baseName.replace(/(_copy)+$/gi, '');
+            let prefix = 'sprite';
+            const match = clean.match(/^(.*?)(?:_(\d+))?$/);
+            if (match && match[1]) {
+                prefix = match[1];
+            }
+
+            let counter = 0;
+            while (existingIds.has(`${prefix}_${counter}`)) {
+                counter++;
+            }
+            return `${prefix}_${counter}`;
+        }
+
+        // Add New Sprite
+        function addNewSprite() {
+            const defaultW = parseInt(inputW.value) || 32;
+            const defaultH = parseInt(inputH.value) || 32;
+            
+            // Offset position slightly from previous sprite
+            const prev = state.sprites[state.sprites.length - 1] || { x: 0, y: 0 };
+            const newX = (prev.x + defaultW < (state.image ? state.image.width : 512)) ? prev.x + defaultW : 0;
+            const newY = (newX === 0) ? prev.y + defaultH : prev.y;
+
+            const newSprite = {
+                id: getUniqueSpriteName('sprite_0'),
+                x: newX,
+                y: newY,
+                width: defaultW,
+                height: defaultH,
+                originX: Math.round(defaultW / 2),
+                originY: defaultH
+            };
+
+            state.sprites.push(newSprite);
+            state.selectedIndex = state.sprites.length - 1;
+            updateApp();
+            showToast("Added new sprite definition!");
+        }
+
+        // Clone Current Sprite (Keeps Box W, H and O(x,y) spot, shifts position)
+        function cloneCurrentSprite() {
+            if (state.sprites.length === 0) return;
+            const curr = state.sprites[state.selectedIndex];
+            
+            // Shift x by width to place side-by-side (or wrap to next row if overflowing)
+            const imgWidth = state.image ? state.image.width : 512;
+            let nextX = curr.x + curr.width;
+            let nextY = curr.y;
+
+            if (nextX + curr.width > imgWidth) {
+                nextX = 0;
+                nextY = curr.y + curr.height;
+            }
+
+            const clonedSprite = {
+                id: getUniqueSpriteName(curr.id || 'sprite_0'),
+                x: nextX,
+                y: nextY,
+                width: curr.width,
+                height: curr.height,
+                originX: curr.originX,
+                originY: curr.originY
+            };
+
+            state.sprites.push(clonedSprite);
+            state.selectedIndex = state.sprites.length - 1;
+            updateApp();
+            showToast("Sprite cloned!");
+        }
+
+        // Delete Sprite
+        function deleteCurrentSprite() {
+            if (state.sprites.length === 0) return;
+            state.sprites.splice(state.selectedIndex, 1);
+            if (state.selectedIndex >= state.sprites.length) {
+                state.selectedIndex = Math.max(0, state.sprites.length - 1);
+            }
+            updateApp();
+            showToast("Sprite deleted");
+        }
+
+        // Auto Grid Slicer
+        function generateAutoGrid() {
+            if (!state.image) return;
+            const cols = parseInt(document.getElementById('gridCols').value) || 1;
+            const rows = parseInt(document.getElementById('gridRows').value) || 1;
+            const w = parseInt(document.getElementById('gridW').value) || 32;
+            const h = parseInt(document.getElementById('gridH').value) || 32;
+
+            const newSprites = [];
+            let count = 0;
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    newSprites.push({
+                        id: `grid_${r}_${c}`,
+                        x: c * w,
+                        y: r * h,
+                        width: w,
+                        height: h,
+                        originX: Math.round(w / 2),
+                        originY: h
+                    });
+                    count++;
+                }
+            }
+
+            state.sprites = newSprites;
+            state.selectedIndex = 0;
+            updateApp();
+            showToast(`Generated ${count} grid sprites!`);
+        }
+
+        // Update Full Application State & UI
+        function updateApp() {
+            if (state.image) {
+                mainCanvas.width = state.image.width;
+                mainCanvas.height = state.image.height;
+                setZoom(state.zoom);
+                document.getElementById('dimensionsInfo').textContent = `${state.image.width} x ${state.image.height} px`;
+            }
+            syncInputFields();
+            updateNavigationUI();
+            renderAll();
+            updateJsonTextArea();
+        }
+
+        // Sync numerical inputs with selected sprite
+        function syncInputFields() {
+            if (state.sprites.length === 0) return;
+            const curr = state.sprites[state.selectedIndex];
+            
+            inputW.value = curr.width;
+            inputH.value = curr.height;
+            inputOX.value = curr.originX;
+            inputOY.value = curr.originY;
+
+            spriteNameInput.value = curr.id || `sprite_${state.selectedIndex}`;
+            spriteXInput.value = curr.x;
+            spriteYInput.value = curr.y;
+            spriteWInput.value = curr.width;
+            spriteHInput.value = curr.height;
+        }
+
+        // Sync Navigation UI
+        function updateNavigationUI() {
+            if (state.sprites.length === 0) {
+                spriteIndexLabel.textContent = "0 / 0";
+                return;
+            }
+            spriteIndexLabel.textContent = `${state.selectedIndex + 1} / ${state.sprites.length}`;
+        }
+
+        // Master Render Function
+        function renderAll() {
+            renderMainCanvas();
+            renderPreview();
+        }
+
+        // Render Main Viewport Canvas
+        function renderMainCanvas() {
+            if (!state.image) return;
+
+            // Clear
+            mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+            
+            // Draw original background image
+            mainCtx.drawImage(state.image, 0, 0);
+
+            // Draw all bounding boxes
+            state.sprites.forEach((sprite, idx) => {
+                const isSelected = (idx === state.selectedIndex);
+
+                // Box Outline
+                mainCtx.lineWidth = isSelected ? 2 : 1;
+                mainCtx.strokeStyle = isSelected ? '#6366f1' : 'rgba(255, 255, 255, 0.4)';
+                mainCtx.strokeRect(sprite.x, sprite.y, sprite.width, sprite.height);
+
+                if (isSelected) {
+                    // Semi-transparent fill for selected box
+                    mainCtx.fillStyle = 'rgba(99, 102, 241, 0.15)';
+                    mainCtx.fillRect(sprite.x, sprite.y, sprite.width, sprite.height);
+
+                    // --- DRAW HANDLES ---
+                    const hs = HANDLE_SIZE;
+                    const halfHs = hs / 2;
+
+                    // Helper to draw handle box with outer touch ring indicator
+                    const drawHandle = (hx, hy, fillStyle) => {
+                        mainCtx.fillStyle = fillStyle;
+                        mainCtx.strokeStyle = '#ffffff';
+                        mainCtx.lineWidth = 1.5;
+                        mainCtx.fillRect(hx - halfHs, hy - halfHs, hs, hs);
+                        mainCtx.strokeRect(hx - halfHs, hy - halfHs, hs, hs);
+
+                        // Soft touch ring target outline for visibility
+                        mainCtx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+                        mainCtx.lineWidth = 1;
+                        mainCtx.beginPath();
+                        mainCtx.arc(hx, hy, hs * 0.8, 0, Math.PI * 2);
+                        mainCtx.stroke();
+                    };
+
+                    // 1. Top-Left Drag Handle
+                    drawHandle(sprite.x, sprite.y, '#6366f1');
+
+                    // 2. Right Resize Handle
+                    drawHandle(sprite.x + sprite.width, sprite.y + sprite.height / 2, '#38bdf8');
+
+                    // 3. Bottom Resize Handle
+                    drawHandle(sprite.x + sprite.width / 2, sprite.y + sprite.height, '#38bdf8');
+
+                    // 4. Bottom-Right Corner Resize Handle
+                    drawHandle(sprite.x + sprite.width, sprite.y + sprite.height, '#a855f7');
+
+                    // --- DRAW ORIGIN O(0,0) SPOT ---
+                    const absoluteOX = sprite.x + sprite.originX;
+                    const absoluteOY = sprite.y + sprite.originY;
+
+                    // Magenta Origin Marker
+                    mainCtx.strokeStyle = '#ff00ff';
+                    mainCtx.lineWidth = 1.5;
+                    
+                    // Crosshair lines
+                    mainCtx.beginPath();
+                    mainCtx.moveTo(absoluteOX - 6, absoluteOY);
+                    mainCtx.lineTo(absoluteOX + 6, absoluteOY);
+                    mainCtx.moveTo(absoluteOX, absoluteOY - 6);
+                    mainCtx.lineTo(absoluteOX, absoluteOY + 6);
+                    mainCtx.stroke();
+
+                    // White / Magenta dot
+                    mainCtx.fillStyle = '#ffffff';
+                    mainCtx.beginPath();
+                    mainCtx.arc(absoluteOX, absoluteOY, 3.5, 0, Math.PI * 2);
+                    mainCtx.fill();
+
+                    mainCtx.fillStyle = '#ff00ff';
+                    mainCtx.beginPath();
+                    mainCtx.arc(absoluteOX, absoluteOY, 2, 0, Math.PI * 2);
+                    mainCtx.fill();
+                }
+            });
+        }
+
+        // Helper to convert hex color to RGB object
+        function hexToRgb(hex) {
+            let c = (hex || '#ffffff').replace('#', '');
+            if (c.length === 3) c = c.split('').map(x => x + x).join('');
+            const num = parseInt(c, 16);
+            return {
+                r: (num >> 16) & 255,
+                g: (num >> 8) & 255,
+                b: num & 255
+            };
+        }
+
+        // Render Bottom Preview Canvas with Custom Chroma Key Color & Magenta Origin Spot
+        function renderPreview() {
+            if (!state.image || state.sprites.length === 0) {
+                previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+                return;
+            }
+
+            const curr = state.sprites[state.selectedIndex];
+            if (!curr || curr.width <= 0 || curr.height <= 0) return;
+
+            // Resize preview canvas to fit sprite
+            previewCanvas.width = curr.width;
+            previewCanvas.height = curr.height;
+
+            // Temporary canvas for pixel-level chroma key processing
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = curr.width;
+            tempCanvas.height = curr.height;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            // Draw cropped sprite onto temp canvas
+            tempCtx.drawImage(
+                state.image,
+                curr.x, curr.y, curr.width, curr.height,
+                0, 0, curr.width, curr.height
+            );
+
+            // COLOR DISTANCE CHROMA KEYING ALGORITHM
+            if (state.chromaKeyWhite) {
+                const imgData = tempCtx.getImageData(0, 0, curr.width, curr.height);
+                const data = imgData.data;
+                const targetRgb = hexToRgb(state.chromaColor || '#ffffff');
+                const thresholdSq = state.chromaThreshold * state.chromaThreshold;
+
+                for (let i = 0; i < data.length; i += 4) {
+                    const dr = data[i] - targetRgb.r;
+                    const dg = data[i + 1] - targetRgb.g;
+                    const db = data[i + 2] - targetRgb.b;
+
+                    // 3D Euclidean distance squared in RGB space
+                    const distSq = dr * dr + dg * dg + db * db;
+
+                    if (distSq <= thresholdSq) {
+                        data[i + 3] = 0; // Set Alpha to 0 (completely transparent)
+                    }
+                }
+                tempCtx.putImageData(imgData, 0, 0);
+            }
+
+            // Draw processed transparent sprite onto preview canvas
+            previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+            previewCtx.drawImage(tempCanvas, 0, 0);
+
+            // DRAW MAGENTA ORIGIN O(0,0) SPOT ON PREVIEW
+            if (state.showOriginMarker) {
+                const ox = curr.originX;
+                const oy = curr.originY;
+
+                // Draw Magenta crosshair
+                previewCtx.strokeStyle = '#ff00ff';
+                previewCtx.lineWidth = 1;
+                
+                previewCtx.beginPath();
+                previewCtx.moveTo(ox - 4, oy);
+                previewCtx.lineTo(ox + 4, oy);
+                previewCtx.moveTo(ox, oy - 4);
+                previewCtx.lineTo(ox, oy + 4);
+                previewCtx.stroke();
+
+                // Draw Solid Magenta Dot with White Ring for clear contrast
+                previewCtx.fillStyle = '#ffffff';
+                previewCtx.beginPath();
+                previewCtx.arc(ox, oy, 3, 0, Math.PI * 2);
+                previewCtx.fill();
+
+                previewCtx.fillStyle = '#ff00ff';
+                previewCtx.beginPath();
+                previewCtx.arc(ox, oy, 2, 0, Math.PI * 2);
+                previewCtx.fill();
+            }
+        }
+
+        // Live JSON Syncing Functions
+        function updateJsonTextArea() {
+            jsonTextArea.value = JSON.stringify(state.sprites, null, 2);
+            jsonError.classList.add('hidden');
+        }
+
+        function parseAndApplyJson() {
+            try {
+                const parsed = JSON.parse(jsonTextArea.value);
+                if (!Array.isArray(parsed)) {
+                    throw new Error("JSON definition must be an array of sprite objects.");
+                }
+
+                // Validate structure
+                parsed.forEach((item, i) => {
+                    if (typeof item.x !== 'number' || typeof item.y !== 'number' ||
+                        typeof item.width !== 'number' || typeof item.height !== 'number') {
+                        throw new Error(`Sprite at index ${i} is missing required x, y, width, or height numbers.`);
+                    }
+                });
+
+                state.sprites = parsed;
+                state.selectedIndex = Math.min(state.selectedIndex, Math.max(0, state.sprites.length - 1));
+                jsonError.classList.add('hidden');
+                updateApp();
+                showToast("JSON applied successfully!");
+            } catch(err) {
+                jsonErrorMsg.textContent = err.message;
+                jsonError.classList.remove('hidden');
+            }
+        }
+
+        function copyJsonToClipboard() {
+            updateJsonTextArea();
+            jsonTextArea.select();
+            document.execCommand('copy');
+            showToast("JSON copied to clipboard!");
+        }
+
+        // Toast Notification Helper
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').textContent = msg;
+            toast.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-[-10px]');
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'pointer-events-none', 'translate-y-[-10px]');
+            }, 2500);
+        }
+    </script>
+</body>
+</html>
