@@ -51,7 +51,7 @@ This document specifies the architecture, coding rules, asset pipelines, game me
 - **Audio Engine**: 
   - `SoundPool` for low-latency SFX (bark, steps, chew, grow, smash, heart pickup).
   - `MediaPlayer` for background music tracks (Main BG & Super Mode BG).
-- **Asset Serialization**: `org.json` for parsing JSON array sprite maps.
+- **Asset Serialization**: `org.json` for parsing JSON array sprite maps with optional chroma-key metadata.
 
 ---
 
@@ -68,7 +68,7 @@ This document specifies the architecture, coding rules, asset pipelines, game me
 [ State Machine ]   [ Multi-Atlas Loader ]                  [ Dynamic $\Delta t$ Physics ]  [ Sound Manager ]
 - TouchToStart      - Pooch Sheet + JSON (baseScale)        - 10:16 Viewport Clip       - SoundPool (SFX)
 - Playing           - ShyGuy Sheet + JSON (baseScale)       - AABB Hitboxes             - MediaPlayer (BGM)
-- SuperMode         - Fudge Sheet + JSON (baseScale)        - Jump Kinematics
+- SuperMode         - Load-Time Chroma Keying (RGB Dist)   - Jump Kinematics
 - GameOver Anim     - Heart & UI Sheet (baseScale)
                                                                      │
                                                                      ▼
@@ -93,7 +93,7 @@ This document specifies the architecture, coding rules, asset pipelines, game me
 
 3. **Multi-Sheet `SpriteAtlasManager` & Base Scale Normalization**:
    - Manages independent PNG/JPEG sheets with matching JSON descriptor files (`pooch.json`, `shyguy.json`, `fudge.json`, `heart.json`, `ui.json`).
-   - **JSON Format Standard (Per Atlas)**:
+   - **JSON Format Standard (Per Atlas / Frame Descriptor)**:
      ```json
      [
        {
@@ -103,7 +103,9 @@ This document specifies the architecture, coding rules, asset pipelines, game me
          "width": 213,
          "height": 120,
          "originX": 133,
-         "originY": 54
+         "originY": 54,
+         "chromaKey": "#ffffff",
+         "chromaThreshold": 255
        },
        {
          "id": "pooch_run_1",
@@ -112,10 +114,55 @@ This document specifies the architecture, coding rules, asset pipelines, game me
          "width": 216,
          "height": 128,
          "originX": 135,
-         "originY": 53
+         "originY": 53,
+         "chromaKey": "#ffffff",
+         "chromaThreshold": 255
        }
      ]
      ```
+     *Note: `chromaKey` (hex color string) and `chromaThreshold` (0–255 `UInt8`) are optional per sprite entry or atlas configuration.*
+
+   - **Chroma Keying Subsystem (3D RGB Euclidean Distance)**:
+     To support sprites extracted from non-transparent backgrounds (e.g., white or green screens), the atlas loader executes a one-time pixel pass at asset load time. The distance formula between a pixel color $(r, g, b)$ and target chroma color $(r_t, g_t, b_t)$ is:
+
+     $$\text{distSq} = (r - r_t)^2 + (g - g_t)^2 + (b - b_t)^2$$
+
+     If $\text{distSq} \le \text{chromaThreshold}^2$, the pixel's alpha channel is set to $0$ (completely transparent).
+     
+     ```kotlin
+     fun applyChromaKey(bitmap: Bitmap, hexColor: String, threshold: Int): Bitmap {
+         val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+         val width = mutableBitmap.width
+         val height = mutableBitmap.height
+         val pixels = IntArray(width * height)
+         mutableBitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+
+         val targetR = Integer.parseInt(hexColor.substring(1, 3), 16)
+         val targetG = Integer.parseInt(hexColor.substring(3, 5), 16)
+         val targetB = Integer.parseInt(hexColor.substring(5, 7), 16)
+         val thresholdSq = threshold * threshold
+
+         for (i in pixels.indices) {
+             val p = pixels[i]
+             val r = (p shr 16) and 0xFF
+             val g = (p shr 8) and 0xFF
+             val b = p and 0xFF
+
+             val dr = r - targetR
+             val dg = g - targetG
+             val db = b - targetB
+             val distSq = dr * dr + dg * dg + db * db
+
+             if (distSq <= thresholdSq) {
+                 pixels[i] = p and 0x00FFFFFF // Clear alpha channel to 0
+             }
+         }
+         mutableBitmap.setPixels(pixels, 0, width, 0, 0, width, height)
+         return mutableBitmap
+     }
+     ```
+     *Executing this process ONCE during asset load ensures rendering remains 100% zero-cost per frame.*
+
    - **Base Scale Normalization Factor**: Each sprite sheet/entity registry entry defines a `baseScale` property to adjust raw artwork pixel sizes to correct relative game proportions:
      $$\text{finalScale} = \text{baseScale} \times \text{stateScaleMultiplier} \times \text{animScale}$$
    - Engine parses `id` keys to automatically sequence and index animation frames (e.g., `pooch_run_0`, `pooch_run_1`).
@@ -171,7 +218,7 @@ object EntityRegistry {
 
 1. **No OpenGL ES / Legacy APIs**: Use `SurfaceHolder.lockHardwareCanvas()` exclusively for graphics output. Since Min API is 31 (Android 12+), directly utilize modern Android APIs without legacy `SDK_INT` version checks.
 2. **Dynamic Delta-Time Physics**: Always scale movement, gravity, and animations by elapsed delta time $\Delta t$ in seconds (`positionY += velocityY * dt`).
-3. **Multi-Atlas Scaling**: Always pass `baseScale` from entity configuration during render calls to ensure consistent proportion across all sprites.
+3. **Multi-Atlas Scaling & Chroma Keying**: Parse optional `chromaKey` and `chromaThreshold` fields from JSON descriptors during atlas initialization to apply 3D Euclidean RGB color distance alpha keying at load time.
 4. **Strict Zero-Allocation Frame Loop**: Maintain zero memory allocations per frame within `update()` and `draw()`.
 5. **Pure Kotlin Architecture**: Maintain clean, idiomatic Kotlin code utilizing standard `Canvas` and `Paint` pipelines without external game engine dependencies.
 6. **Lifecycle Hygiene**: Explicitly stop threads, release `SoundPool` resources, stop `MediaPlayer` streams, and safely finalize surface operations inside `surfaceDestroyed()` / `onPause()`.
@@ -188,8 +235,8 @@ object EntityRegistry {
   - [x] Hearts UI & collectible sprite
   - [ ] Tap to start text rendering / bitmap font asset
 - [x] Background Graphic (Landscape)
-- [x] Sprite Editor (External tool setup)
-- [ ] Multi-Atlas JSON Parser with `baseScale` normalization support (`id`, `x`, `y`, `width`, `height`, `originX`, `originY`)
+- [x] Sprite Editor (With 3D RGB Distance Chroma Key export support)
+- [ ] Multi-Atlas JSON Parser with `baseScale` and Chroma Key (`chromaKey`, `chromaThreshold`) processing
 - [ ] Sound & Audio Assets
   - [ ] Bark / Arf sound (`pooch_bark.wav`)
   - [ ] Sad puppy whimper (`pooch_hurt.wav`)
@@ -205,7 +252,7 @@ object EntityRegistry {
 - [ ] Android App Skeleton (Min API 31, Target API 36, Portrait full-screen activity)
 - [ ] Game Loop Thread with `lockHardwareCanvas()`, $60\text{ FPS}$ / $30\text{ FPS}$ frame pacing & $\Delta t$ timing
 - [ ] Touch Input Handler (Tap to jump trigger)
-- [ ] Multi-Sprite Atlas Loader & Base-Scale Origin-aware Frame Renderer
+- [ ] Multi-Sprite Atlas Loader & Base-Scale Origin-aware Frame Renderer with Chroma Key Transparency Pre-processing
 - [ ] Landscape Background Loader with 10:16 Crop Viewport & Infinite Scroll Loop
 
 ### Phase 3: Gameplay & Character Kinematics
