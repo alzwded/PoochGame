@@ -1,0 +1,134 @@
+[
+  {
+    "id": "walk_0",
+    "x": 26,
+    "y": 126,
+    "width": 206,
+    "height": 117,
+    "originX": 132,
+    "originY": 50,
+    "key": "#ffffff",
+    "threshold": 41
+  },
+  {
+    "id": "walk_1",
+    "x": 288,
+    "y": 121,
+    "width": 206,
+    "height": 117,
+    "originX": 132,
+    "originY": 50,
+    "key": "#ffffff",
+    "threshold": 41
+  },
+  {
+    "id": "walk_2",
+    "x": 539,
+    "y": 109,
+    "width": 206,
+    "height": 127,
+    "originX": 132,
+    "originY": 50,
+    "key": "#ffffff",
+    "threshold": 38
+  },
+  {
+    "id": "walk_3",
+    "x": 22,
+    "y": 322,
+    "width": 219,
+    "height": 127,
+    "originX": 143,
+    "originY": 51,
+    "key": "#ffffff",
+    "threshold": 36
+  },
+  {
+    "id": "walk_4",
+    "x": 285,
+    "y": 319,
+    "width": 213,
+    "height": 137,
+    "originX": 132,
+    "originY": 50,
+    "key": "#ffffff",
+    "threshold": 32
+  },
+  {
+    "id": "walk_5",
+    "x": 538,
+    "y": 339,
+    "width": 213,
+    "height": 124,
+    "originX": 131,
+    "originY": 56,
+    "key": "#ffffff",
+    "threshold": 41
+  },
+  {
+    "id": "jump_0",
+    "x": 19,
+    "y": 844,
+    "width": 219,
+    "height": 138,
+    "originX": 140,
+    "originY": 59,
+    "key": "#ffffff",
+    "threshold": 24
+  },
+  {
+    "id": "jump_1",
+    "x": 277,
+    "y": 777,
+    "width": 220,
+    "height": 205,
+    "originX": 133,
+    "originY": 54,
+    "key": "#ffffff",
+    "threshold": 31
+  },
+  {
+    "id": "jump_2",
+    "x": 537,
+    "y": 766,
+    "width": 220,
+    "height": 205,
+    "originX": 130,
+    "originY": 55,
+    "key": "#ffffff",
+    "threshold": 32
+  },
+  {
+    "id": "jump_3",
+    "x": 16,
+    "y": 1019,
+    "width": 220,
+    "height": 205,
+    "originX": 125,
+    "originY": 58,
+    "key": "#ffffff",
+    "threshold": 34
+  },
+  {
+    "id": "jump_4",
+    "x": 283,
+    "y": 1077,
+    "width": 214,
+    "height": 164,
+    "originX": 147,
+    "originY": 84,
+    "key": "#ffffff",
+    "threshold": 31
+  },
+  {
+    "id": "jump_5",
+    "x": 543,
+    "y": 1153,
+    "width": 203,
+    "height": 134,
+    "originX": 143,
+    "originY": 64,
+    "key": "#ffffff",
+    "threshold": 29
+  }
+]
