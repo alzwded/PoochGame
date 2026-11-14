@@ -13,9 +13,9 @@ This document specifies the architecture, coding rules, asset pipelines, game me
 - **Controls**: Single-tap anywhere on screen triggers a jump.
 - **States & Flow**:
   - `TOUCH_TO_START`: Full-screen portrait splash screen showing title/tap directive.
-  - `PLAYING`: Standard portrait scrolling state. Jump over Shy Guys, collect Fudge snacks.
+  - `PLAYING`: Standard portrait scrolling state. Jump over Shy Guys, collect Fudge snacks, and catch rare Hearts.
   - `SUPER_MODE`: Triggered upon collecting **10 Fudges**.
-    - Player scales up (~1.8x – 2.0x).
+    - Player scales up (~1.8x – 2.0x beyond base scale).
     - Game speed increases significantly.
     - Player smashes directly through Shy Guys and Fudge/Shy Guy towers without taking damage.
     - Smashed counter increments.
@@ -24,7 +24,9 @@ This document specifies the architecture, coding rules, asset pipelines, game me
   - `GAME_OVER`: Triggered when 3 Hearts are depleted.
     - Executes a **Mario-style death animation** (brief vertical jump upwards, disable horizontal collisions, then drop accelerating downward off the bottom of the viewport).
     - Prompts screen reset to `TOUCH_TO_START`.
-- **Collectibles**: Fudges (+1 to super mode counter, plays chew animation/SFX).
+- **Collectibles**: 
+  - **Fudge**: Standard collectible (+1 to super mode counter, plays chew animation/SFX).
+  - **Heart**: Rare spawn (~1 in 100 entity spawn rolls). Restores 1 HP up to the maximum of 3 Hearts.
 - **Obstacles**: Shy Guys (single units or towers).
 - **Background & Camera System**:
   - Source background image is **Landscape**.
@@ -47,7 +49,7 @@ This document specifies the architecture, coding rules, asset pipelines, game me
   - **Power-Saving / Game Booster Target**: $30\text{ FPS}$ (frame budget $\approx 33.3\text{ ms}$).
   - **Delta-Time Decoupling**: Physics calculations **MUST** be scaled by elapsed delta time $\Delta t$ in seconds so movement speeds remain identical regardless of whether the device runs at $60\text{ FPS}$ or throttles to $30\text{ FPS}$.
 - **Audio Engine**: 
-  - `SoundPool` for low-latency SFX (bark, steps, chew, grow, smash).
+  - `SoundPool` for low-latency SFX (bark, steps, chew, grow, smash, heart pickup).
   - `MediaPlayer` for background music tracks (Main BG & Super Mode BG).
 - **Asset Serialization**: `org.json` for parsing JSON array sprite maps.
 
@@ -64,13 +66,14 @@ This document specifies the architecture, coding rules, asset pipelines, game me
        ┌───────────────────┬─────────────────────────────────────────┼───────────────────────────┐
        ▼                   ▼                                         ▼                           ▼
 [ State Machine ]   [ Multi-Atlas Loader ]                  [ Dynamic $\Delta t$ Physics ]  [ Sound Manager ]
-- TouchToStart      - Pooch Sheet + JSON                    - 10:16 Viewport Clip       - SoundPool (SFX)
-- Playing           - ShyGuy Sheet + JSON                   - AABB Hitboxes             - MediaPlayer (BGM)
-- SuperMode         - Fudge Sheet + JSON                    - Jump Kinematics
-- GameOver Anim     - UI Sheet + JSON
+- TouchToStart      - Pooch Sheet + JSON (baseScale)        - 10:16 Viewport Clip       - SoundPool (SFX)
+- Playing           - ShyGuy Sheet + JSON (baseScale)       - AABB Hitboxes             - MediaPlayer (BGM)
+- SuperMode         - Fudge Sheet + JSON (baseScale)        - Jump Kinematics
+- GameOver Anim     - Heart & UI Sheet (baseScale)
                                                                      │
                                                                      ▼
                                                      [ lockHardwareCanvas() Pipeline ]
+                                                     - Hierarchical Scale Calculation
                                                      - Zero-Allocation Draw Passes
                                                      - Origin Pivot Sub-Bitmap Slicing
                                                      - 10:16 Aspect Viewport Crop
@@ -88,8 +91,8 @@ This document specifies the architecture, coding rules, asset pipelines, game me
    - Samples a 10:16 portrait crop slice out of the landscape background bitmap.
    - Calculates two-pass draw calls when scrolling spans the seamless horizontal looping boundary.
 
-3. **Multi-Sheet `SpriteAtlasManager`**:
-   - Manages independent PNG/JPEG sheets with matching JSON descriptor files (`pooch.json`, `shyguy.json`, `fudge.json`, etc.).
+3. **Multi-Sheet `SpriteAtlasManager` & Base Scale Normalization**:
+   - Manages independent PNG/JPEG sheets with matching JSON descriptor files (`pooch.json`, `shyguy.json`, `fudge.json`, `heart.json`, `ui.json`).
    - **JSON Format Standard (Per Atlas)**:
      ```json
      [
@@ -113,6 +116,8 @@ This document specifies the architecture, coding rules, asset pipelines, game me
        }
      ]
      ```
+   - **Base Scale Normalization Factor**: Each sprite sheet/entity registry entry defines a `baseScale` property to adjust raw artwork pixel sizes to correct relative game proportions:
+     $$\text{finalScale} = \text{baseScale} \times \text{stateScaleMultiplier} \times \text{animScale}$$
    - Engine parses `id` keys to automatically sequence and index animation frames (e.g., `pooch_run_0`, `pooch_run_1`).
    - `originX` and `originY` determine entity ground pivots and relative alignment.
 
@@ -122,7 +127,7 @@ This document specifies the architecture, coding rules, asset pipelines, game me
 
 ---
 
-## 4. Entity & Physics System (10:16 Viewport Calibrated)
+## 4. Entity, Pickup & Physics System
 
 ### Kinematics (Calibrated for $1080 \times 1728$ Workspace)
 - **Gravity**: $g \approx 3800\text{ px/s}^2$.
@@ -130,9 +135,34 @@ This document specifies the architecture, coding rules, asset pipelines, game me
 - **Base Scroll Speed**: $v_x = 550\text{ px/s}$.
 - **Super Mode Scroll Speed**: $v_{x,\text{super}} = 1100\text{ px/s}$.
 
+### Entity Registry & Base Scale Configuration
+```kotlin
+data class EntityTypeConfig(
+    val atlasKey: String,
+    val baseScale: Float, // Normalizes artwork pixels to virtual world units
+    val hitboxInsetFactor: Float = 0.8f // 80% inset for fair play collisions
+)
+
+object EntityRegistry {
+    val POOCH = EntityTypeConfig("pooch", baseScale = 1.2f)
+    val SHY_GUY = EntityTypeConfig("shyguy", baseScale = 1.0f)
+    val FUDGE = EntityTypeConfig("fudge", baseScale = 0.85f)
+    val HEART = EntityTypeConfig("heart", baseScale = 0.9f)
+}
+```
+
+### Pickups & Spawning Engine
+- **Fudge (Common Pickup)**:
+  - Standard collectible. Increments fudge counter.
+  - Reaching 10 fudges triggers **Super Mode** (5-second duration).
+- **Heart (Rare Pickup)**:
+  - Spawns rarely (~1 in 100 entity spawn rolls).
+  - Collectible only if player has fewer than 3 hearts (`currentHp < 3`), restoring +1 HP.
+  - Animates along a gentle sine-wave Y trajectory (`y = groundY - floatOffset + sin(time * freq) * amp`).
+
 ### Hitboxes & Collision Rules
 - Hitbox bounds are anchored around `originX` and `originY`.
-- Internal collision bounds apply an ~80% padding factor to prevent unfair visual edge-hits.
+- Internal collision bounds apply `hitboxInsetFactor` (~80%) to prevent unfair visual edge-hits.
 - Handled via pre-allocated `RectF.intersects(boxA, boxB)` evaluations.
 
 ---
@@ -141,9 +171,10 @@ This document specifies the architecture, coding rules, asset pipelines, game me
 
 1. **No OpenGL ES / Legacy APIs**: Use `SurfaceHolder.lockHardwareCanvas()` exclusively for graphics output. Since Min API is 31 (Android 12+), directly utilize modern Android APIs without legacy `SDK_INT` version checks.
 2. **Dynamic Delta-Time Physics**: Always scale movement, gravity, and animations by elapsed delta time $\Delta t$ in seconds (`positionY += velocityY * dt`).
-3. **Strict Zero-Allocation Frame Loop**: Maintain zero memory allocations per frame within `update()` and `draw()`.
-4. **Pure Kotlin Architecture**: Maintain clean, idiomatic Kotlin code utilizing standard `Canvas` and `Paint` pipelines without external game engine dependencies.
-5. **Lifecycle Hygiene**: Explicitly stop threads, release `SoundPool` resources, stop `MediaPlayer` streams, and safely finalize surface operations inside `surfaceDestroyed()` / `onPause()`.
+3. **Multi-Atlas Scaling**: Always pass `baseScale` from entity configuration during render calls to ensure consistent proportion across all sprites.
+4. **Strict Zero-Allocation Frame Loop**: Maintain zero memory allocations per frame within `update()` and `draw()`.
+5. **Pure Kotlin Architecture**: Maintain clean, idiomatic Kotlin code utilizing standard `Canvas` and `Paint` pipelines without external game engine dependencies.
+6. **Lifecycle Hygiene**: Explicitly stop threads, release `SoundPool` resources, stop `MediaPlayer` streams, and safely finalize surface operations inside `surfaceDestroyed()` / `onPause()`.
 
 ---
 
@@ -154,11 +185,11 @@ This document specifies the architecture, coding rules, asset pipelines, game me
   - [x] Pooch character spritesheet
   - [x] Shy Guys spritesheet
   - [x] Fudge collectible sprite
-  - [x] Hearts UI icons
+  - [x] Hearts UI & collectible sprite
   - [ ] Tap to start text rendering / bitmap font asset
 - [x] Background Graphic (Landscape)
 - [x] Sprite Editor (External tool setup)
-- [ ] Multi-Atlas JSON Parser (`id`, `x`, `y`, `width`, `height`, `originX`, `originY` for each sheet)
+- [ ] Multi-Atlas JSON Parser with `baseScale` normalization support (`id`, `x`, `y`, `width`, `height`, `originX`, `originY`)
 - [ ] Sound & Audio Assets
   - [ ] Bark / Arf sound (`pooch_bark.wav`)
   - [ ] Sad puppy whimper (`pooch_hurt.wav`)
@@ -166,6 +197,7 @@ This document specifies the architecture, coding rules, asset pipelines, game me
   - [ ] Smash sound (`smash_tower.wav`)
   - [ ] Chew animation sound (`fudge_eat.wav`)
   - [ ] Grow big powerup sound (`grow_big.wav`)
+  - [ ] Heart pickup sound (`heart_pickup.wav`)
   - [ ] Main background music track (`bg_main.ogg`)
   - [ ] Super mode high-octane BGM track (`bg_super.ogg`)
 
@@ -173,7 +205,7 @@ This document specifies the architecture, coding rules, asset pipelines, game me
 - [ ] Android App Skeleton (Min API 31, Target API 36, Portrait full-screen activity)
 - [ ] Game Loop Thread with `lockHardwareCanvas()`, $60\text{ FPS}$ / $30\text{ FPS}$ frame pacing & $\Delta t$ timing
 - [ ] Touch Input Handler (Tap to jump trigger)
-- [ ] Multi-Sprite Atlas Loader & Origin-aware Frame Renderer
+- [ ] Multi-Sprite Atlas Loader & Base-Scale Origin-aware Frame Renderer
 - [ ] Landscape Background Loader with 10:16 Crop Viewport & Infinite Scroll Loop
 
 ### Phase 3: Gameplay & Character Kinematics
@@ -181,16 +213,16 @@ This document specifies the architecture, coding rules, asset pipelines, game me
 - [ ] Pooch Run Animation Controller (indexed frame lookup)
 - [ ] Jump Physics & Jump Animation Trigger
 - [ ] AABB Hitboxes & Visual Debug Draw Toggles
-- [ ] Obstacle & Collectible Spawner (Shy Guys & Fudges)
+- [ ] Obstacle & Collectible Spawner (Shy Guys, Fudges, & 1-in-100 Rare Hearts)
 
 ### Phase 4: UI, Counters & Power-ups
 - [ ] Fudge Counter UI Display
-- [ ] HP Hearts Counter UI Display (3 Hearts max)
+- [ ] HP Hearts Counter UI Display (3 Hearts max) & Rare Heart pickup restoration logic
 - [ ] Hurt Animation & Invincibility Frames
 - [ ] Shy Guy Hurt / Stun Animation
 - [ ] Super Mode State Machine:
   - Trigger at 10 Fudges
-  - Character scale-up (1.8x - 2.0x) & speed boost
+  - Character scale-up (1.8x - 2.0x beyond `baseScale`) & speed boost
   - Tower spawning (Fudge/Shy Guy stacks)
   - 5-second timer & smooth scale-down transition
 - [ ] Shy Guys Smashed Counter UI
