@@ -249,11 +249,11 @@ object EntityRegistry {
   - [ ] Super mode high-octane BGM track (`bg_super.ogg`)
 
 ### Phase 2: Engine Core & Lifecycle
-- [ ] Android App Skeleton (Min API 31, Target API 36, Portrait full-screen activity)
+- [x] Android App Skeleton (Min API 31, Target API 36, Portrait full-screen activity)
 - [ ] Game Loop Thread with `lockHardwareCanvas()`, $60\text{ FPS}$ / $30\text{ FPS}$ frame pacing & $\Delta t$ timing
-- [ ] Touch Input Handler (Tap to jump trigger)
+- [x] Touch Input Handler (Tap to jump trigger)
 - [ ] Multi-Sprite Atlas Loader & Base-Scale Origin-aware Frame Renderer with Chroma Key Transparency Pre-processing
-- [ ] Landscape Background Loader with 10:16 Crop Viewport & Infinite Scroll Loop
+- [x] Landscape Background Loader with 10:16 Crop Viewport & Infinite Scroll Loop
 
 ### Phase 3: Gameplay & Character Kinematics
 - [ ] Scene State Controller (`TOUCH_TO_START` vs `PLAYING`)

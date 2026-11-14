@@ -1,9 +1,10 @@
 package alzwded.poochgame
 
 import android.os.Bundle
-import android.view.WindowInsets
-import android.view.WindowInsetsController
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import alzwded.poochgame.engine.GameSurfaceView
 
 /**
@@ -20,12 +21,12 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Go full-screen immersive
-        setupImmersiveMode()
-
         // Create and set the game surface as the content view
         gameSurfaceView = GameSurfaceView(this)
         setContentView(gameSurfaceView)
+
+        // Go full-screen immersive (must be called after setContentView so DecorView exists)
+        setupImmersiveMode()
     }
 
     override fun onResume() {
@@ -42,13 +43,14 @@ class MainActivity : AppCompatActivity() {
     /**
      * Configure full-screen immersive sticky mode.
      * Hides status bar, navigation bar, and system UI for a true full-screen game experience.
-     * Min API 31 — no legacy flag checks needed.
      */
     private fun setupImmersiveMode() {
-        window.insetsController?.let { controller ->
-            controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, window.decorView).let { controller ->
+            controller.hide(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
             controller.systemBarsBehavior =
-                WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
     }
 }
+
