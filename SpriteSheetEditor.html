@@ -462,10 +462,10 @@
             img.onload = () => {
                 state.image = img;
                 state.sprites = [
-                    { id: "hero_idle_0", x: 16, y: 16, width: 32, height: 32, originX: 16, originY: 32 },
-                    { id: "hero_idle_1", x: 80, y: 16, width: 32, height: 32, originX: 16, originY: 32 },
-                    { id: "hero_walk_0", x: 144, y: 16, width: 32, height: 32, originX: 16, originY: 32 },
-                    { id: "hero_walk_1", x: 208, y: 16, width: 32, height: 32, originX: 16, originY: 32 }
+                    { id: "hero_idle_0", x: 16, y: 16, width: 32, height: 32, originX: 16, originY: 32, key: "#ffffff", threshold: 45 },
+                    { id: "hero_idle_1", x: 80, y: 16, width: 32, height: 32, originX: 16, originY: 32, key: "#ffffff", threshold: 45 },
+                    { id: "hero_walk_0", x: 144, y: 16, width: 32, height: 32, originX: 16, originY: 32, key: "#ffffff", threshold: 45 },
+                    { id: "hero_walk_1", x: 208, y: 16, width: 32, height: 32, originX: 16, originY: 32, key: "#ffffff", threshold: 45 }
                 ];
                 state.selectedIndex = 0;
                 updateApp();
@@ -656,6 +656,10 @@
 
             chromaColorInput.addEventListener('input', (e) => {
                 state.chromaColor = e.target.value;
+                if (state.sprites.length > 0 && state.sprites[state.selectedIndex]) {
+                    state.sprites[state.selectedIndex].key = e.target.value;
+                    updateJsonTextArea();
+                }
                 renderPreview();
             });
 
@@ -667,6 +671,10 @@
                         if (result && result.sRGBHex) {
                             state.chromaColor = result.sRGBHex;
                             chromaColorInput.value = result.sRGBHex;
+                            if (state.sprites.length > 0 && state.sprites[state.selectedIndex]) {
+                                state.sprites[state.selectedIndex].key = result.sRGBHex;
+                                updateJsonTextArea();
+                            }
                             renderPreview();
                             showToast(`Color picked: ${result.sRGBHex}`);
                         }
@@ -681,6 +689,10 @@
             chromaThreshold.addEventListener('input', (e) => {
                 state.chromaThreshold = parseInt(e.target.value) || 45;
                 chromaThresholdVal.textContent = state.chromaThreshold;
+                if (state.sprites.length > 0 && state.sprites[state.selectedIndex]) {
+                    state.sprites[state.selectedIndex].threshold = state.chromaThreshold;
+                    updateJsonTextArea();
+                }
                 renderPreview();
             });
 
@@ -1006,7 +1018,9 @@
                 width: defaultW,
                 height: defaultH,
                 originX: Math.round(defaultW / 2),
-                originY: defaultH
+                originY: defaultH,
+                key: state.chromaColor,
+                threshold: state.chromaThreshold
             };
 
             state.sprites.push(newSprite);
@@ -1037,7 +1051,9 @@
                 width: curr.width,
                 height: curr.height,
                 originX: curr.originX,
-                originY: curr.originY
+                originY: curr.originY,
+                key: curr.key || state.chromaColor,
+                threshold: (curr.threshold !== undefined) ? curr.threshold : state.chromaThreshold
             };
 
             state.sprites.push(clonedSprite);
@@ -1107,6 +1123,16 @@
             if (state.sprites.length === 0) return;
             const curr = state.sprites[state.selectedIndex];
             
+            if (curr.key) {
+                state.chromaColor = curr.key;
+                chromaColorInput.value = curr.key;
+            }
+            if (curr.threshold !== undefined) {
+                state.chromaThreshold = curr.threshold;
+                chromaThreshold.value = curr.threshold;
+                chromaThresholdVal.textContent = curr.threshold;
+            }
+
             inputW.value = curr.width;
             inputH.value = curr.height;
             inputOX.value = curr.originX;
@@ -1316,26 +1342,70 @@
 
         // Live JSON Syncing Functions
         function updateJsonTextArea() {
-            jsonTextArea.value = JSON.stringify(state.sprites, null, 2);
+            const formattedSprites = state.sprites.map(s => ({
+                id: s.id,
+                x: s.x,
+                y: s.y,
+                width: s.width,
+                height: s.height,
+                originX: s.originX,
+                originY: s.originY,
+                key: s.key || state.chromaColor || '#ffffff',
+                threshold: (s.threshold !== undefined) ? s.threshold : (state.chromaThreshold || 45)
+            }));
+            jsonTextArea.value = JSON.stringify(formattedSprites, null, 2);
             jsonError.classList.add('hidden');
         }
 
         function parseAndApplyJson() {
             try {
                 const parsed = JSON.parse(jsonTextArea.value);
-                if (!Array.isArray(parsed)) {
-                    throw new Error("JSON definition must be an array of sprite objects.");
+                let spriteList = [];
+
+                if (Array.isArray(parsed)) {
+                    spriteList = parsed;
+                } else if (parsed && typeof parsed === 'object' && Array.isArray(parsed.sprites)) {
+                    spriteList = parsed.sprites;
+                    if (parsed.key) {
+                        state.chromaColor = parsed.key;
+                        chromaColorInput.value = parsed.key;
+                    }
+                    if (parsed.threshold !== undefined) {
+                        state.chromaThreshold = parsed.threshold;
+                        chromaThreshold.value = parsed.threshold;
+                        chromaThresholdVal.textContent = parsed.threshold;
+                    }
+                } else {
+                    throw new Error("JSON definition must be an array of sprite objects or object with a 'sprites' array.");
                 }
 
                 // Validate structure
-                parsed.forEach((item, i) => {
+                spriteList.forEach((item, i) => {
                     if (typeof item.x !== 'number' || typeof item.y !== 'number' ||
                         typeof item.width !== 'number' || typeof item.height !== 'number') {
                         throw new Error(`Sprite at index ${i} is missing required x, y, width, or height numbers.`);
                     }
                 });
 
-                state.sprites = parsed;
+                state.sprites = spriteList.map(s => ({
+                    ...s,
+                    key: s.key || state.chromaColor || '#ffffff',
+                    threshold: (s.threshold !== undefined) ? s.threshold : (state.chromaThreshold || 45)
+                }));
+
+                if (state.sprites.length > 0) {
+                    const first = state.sprites[0];
+                    if (first.key) {
+                        state.chromaColor = first.key;
+                        chromaColorInput.value = first.key;
+                    }
+                    if (first.threshold !== undefined) {
+                        state.chromaThreshold = first.threshold;
+                        chromaThreshold.value = first.threshold;
+                        chromaThresholdVal.textContent = first.threshold;
+                    }
+                }
+
                 state.selectedIndex = Math.min(state.selectedIndex, Math.max(0, state.sprites.length - 1));
                 jsonError.classList.add('hidden');
                 updateApp();
