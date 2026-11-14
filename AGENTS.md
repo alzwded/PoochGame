@@ -236,7 +236,7 @@ object EntityRegistry {
   - [ ] Tap to start text rendering / bitmap font asset
 - [x] Background Graphic (Landscape)
 - [x] Sprite Editor (With 3D RGB Distance Chroma Key export support)
-- [ ] Multi-Atlas JSON Parser with `baseScale` and Chroma Key (`chromaKey`, `chromaThreshold`) processing
+- [x] Multi-Atlas JSON Parser with `baseScale` and Chroma Key (`chromaKey`, `chromaThreshold`) processing
 - [ ] Sound & Audio Assets
   - [ ] Bark / Arf sound (`pooch_bark.wav`)
   - [ ] Sad puppy whimper (`pooch_hurt.wav`)
@@ -245,20 +245,20 @@ object EntityRegistry {
   - [ ] Chew animation sound (`fudge_eat.wav`)
   - [ ] Grow big powerup sound (`grow_big.wav`)
   - [ ] Heart pickup sound (`heart_pickup.wav`)
-  - [ ] Main background music track (`bg_main.ogg`)
-  - [ ] Super mode high-octane BGM track (`bg_super.ogg`)
+  - [x] Main background music track (`bg_main.m4a`)
+  - [ ] Super mode high-octane BGM track (`bg_super.m4a`)
 
 ### Phase 2: Engine Core & Lifecycle
 - [x] Android App Skeleton (Min API 31, Target API 36, Portrait full-screen activity)
-- [ ] Game Loop Thread with `lockHardwareCanvas()`, $60\text{ FPS}$ / $30\text{ FPS}$ frame pacing & $\Delta t$ timing
+- [x] Game Loop Thread with `lockHardwareCanvas()`, $60\text{ FPS}$ / $30\text{ FPS}$ frame pacing & $\Delta t$ timing
 - [x] Touch Input Handler (Tap to jump trigger)
-- [ ] Multi-Sprite Atlas Loader & Base-Scale Origin-aware Frame Renderer with Chroma Key Transparency Pre-processing
+- [x] Multi-Sprite Atlas Loader & Base-Scale Origin-aware Frame Renderer with Chroma Key Transparency Pre-processing
 - [x] Landscape Background Loader with 10:16 Crop Viewport & Infinite Scroll Loop
 
 ### Phase 3: Gameplay & Character Kinematics
 - [ ] Scene State Controller (`TOUCH_TO_START` vs `PLAYING`)
-- [ ] Pooch Run Animation Controller (indexed frame lookup)
-- [ ] Jump Physics & Jump Animation Trigger
+- [x] Pooch Run Animation Controller (indexed frame lookup)
+- [x] Jump Physics & Jump Animation Trigger
 - [ ] AABB Hitboxes & Visual Debug Draw Toggles
 - [ ] Obstacle & Collectible Spawner (Shy Guys, Fudges, & 1-in-100 Rare Hearts)
 

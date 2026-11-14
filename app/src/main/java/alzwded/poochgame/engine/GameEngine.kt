@@ -61,20 +61,12 @@ class GameEngine(private val context: Context) {
         textAlign = Paint.Align.CENTER
         setShadowLayer(6f, 3f, 3f, Color.BLACK)
     }
-    private val debugPaint = Paint().apply {
-        color = Color.argb(128, 0, 255, 0)
-        style = Paint.Style.STROKE
-        strokeWidth = 2f
-    }
 
-    // --- Sprite Data (parsed but not yet fully rendered) ---
-    private var poochFrames: List<SpriteFrame> = emptyList()
-    private var poochAnimations: Map<String, List<SpriteFrame>> = emptyMap()
+    // --- Player Character ---
+    var pooch: PoochPlayer? = null
+        private set
 
-    // --- Player State ---
-    private var playerY: Float = 0f
-    private var playerVelocityY: Float = 0f
-    private var isOnGround: Boolean = true
+    // --- Game Stats ---
     private var playerHP: Int = GameConstants.MAX_HP
     private var fudgeCount: Int = 0
     private var score: Int = 0
@@ -100,7 +92,7 @@ class GameEngine(private val context: Context) {
      * Load game assets from the assets directory.
      */
     private fun loadAssets() {
-        // Load background
+        // 1. Load background
         try {
             val bgStream = context.assets.open("backgrounds/bg.jpg")
             bgBitmap = BitmapFactory.decodeStream(bgStream)
@@ -108,7 +100,6 @@ class GameEngine(private val context: Context) {
 
             bgBitmap?.let { bg ->
                 // Calculate the 10:16 crop region from the landscape background
-                // The background is landscape (1376x768), we crop a portrait slice
                 bgCropHeight = bg.height
                 bgCropWidth = (bgCropHeight * 10f / 16f).toInt()
                 Log.i(TAG, "Background loaded: ${bg.width}x${bg.height}, crop: ${bgCropWidth}x$bgCropHeight")
@@ -117,14 +108,18 @@ class GameEngine(private val context: Context) {
             Log.e(TAG, "Failed to load background", e)
         }
 
-        // Parse the pooch sprite descriptor (skeleton — sprite rendering comes later)
+        // 2. Load Pooch sprite atlas and initialize PoochPlayer
         try {
-            poochFrames = SpriteJsonParser.parse(context, "sprites/pooch.json")
-            poochAnimations = SpriteJsonParser.groupAnimations(poochFrames)
-            Log.i(TAG, "Pooch sprite atlas parsed: ${poochFrames.size} frames, " +
-                    "${poochAnimations.size} animations [${poochAnimations.keys.joinToString()}]")
+            val poochAtlas = SpriteAtlasManager.loadAtlas(
+                context,
+                EntityRegistry.POOCH.atlasKey,
+                "sprites/pooch.jpg",
+                "sprites/pooch.json"
+            )
+            pooch = PoochPlayer(poochAtlas)
+            Log.i(TAG, "PoochPlayer initialized with atlas '${poochAtlas.key}'")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse pooch sprite data", e)
+            Log.e(TAG, "Failed to load pooch atlas", e)
         }
     }
 
@@ -132,9 +127,7 @@ class GameEngine(private val context: Context) {
      * Reset player state for a new game.
      */
     private fun resetPlayer() {
-        playerY = GameConstants.GROUND_Y
-        playerVelocityY = 0f
-        isOnGround = true
+        pooch?.reset()
         playerHP = GameConstants.MAX_HP
         fudgeCount = 0
         score = 0
@@ -143,7 +136,6 @@ class GameEngine(private val context: Context) {
 
     /**
      * Handle a tap input event.
-     * Coordinates are in screen space (will be converted to virtual internally if needed).
      */
     fun onTap(screenTapX: Float, screenTapY: Float) {
         when (state) {
@@ -153,14 +145,14 @@ class GameEngine(private val context: Context) {
                 Log.d(TAG, "Tap → PLAYING")
             }
             GameState.PLAYING, GameState.SUPER_MODE -> {
-                if (isOnGround) {
-                    playerVelocityY = GameConstants.JUMP_IMPULSE
-                    isOnGround = false
-                    Log.d(TAG, "Jump! velocityY=$playerVelocityY")
+                val jumped = pooch?.jump() ?: false
+                if (jumped) {
+                    Log.d(TAG, "Pooch jumped!")
                 }
             }
             GameState.GAME_OVER -> {
                 state = GameState.TOUCH_TO_START
+                resetPlayer()
                 Log.d(TAG, "Tap → TOUCH_TO_START")
             }
             GameState.HURT -> {
@@ -179,13 +171,14 @@ class GameEngine(private val context: Context) {
 
         when (state) {
             GameState.TOUCH_TO_START -> {
-                // Idle — could animate background gently
+                // Idle walk on splash screen
+                pooch?.update(dt * 0.75f, false)
             }
             GameState.PLAYING -> {
                 updatePlaying(dt)
             }
             GameState.SUPER_MODE -> {
-                // TODO: Super mode logic
+                // TODO: Super mode timer & transitions
                 updatePlaying(dt)
             }
             GameState.HURT -> {
@@ -201,12 +194,14 @@ class GameEngine(private val context: Context) {
      * Core gameplay update: scroll, player physics, spawning, collisions.
      */
     private fun updatePlaying(dt: Float) {
-        // Scroll background
-        val scrollSpeed = if (state == GameState.SUPER_MODE) {
+        val isSuper = (state == GameState.SUPER_MODE)
+        val scrollSpeed = if (isSuper) {
             GameConstants.SUPER_SCROLL_SPEED
         } else {
             GameConstants.BASE_SCROLL_SPEED
         }
+
+        // Scroll background
         bgScrollX += scrollSpeed * dt
 
         // Wrap background scroll for seamless looping
@@ -217,18 +212,8 @@ class GameEngine(private val context: Context) {
             }
         }
 
-        // Player gravity & jump physics
-        if (!isOnGround) {
-            playerVelocityY += GameConstants.GRAVITY * dt
-            playerY += playerVelocityY * dt
-
-            // Landing check
-            if (playerY >= GameConstants.GROUND_Y) {
-                playerY = GameConstants.GROUND_Y
-                playerVelocityY = 0f
-                isOnGround = true
-            }
-        }
+        // Update Pooch kinematics & animation
+        pooch?.update(dt, isSuper)
 
         // Increment score over time
         score += (scrollSpeed * dt * 0.1f).toInt()
@@ -239,17 +224,15 @@ class GameEngine(private val context: Context) {
 
     /**
      * Render the current frame to the provided canvas.
-     *
-     * ZERO heap allocations in this method — all draw primitives are pre-allocated.
+     * ZERO heap allocations in this method.
      */
     fun render(canvas: Canvas) {
-        // Clear canvas
         canvas.drawColor(Color.BLACK)
 
         when (state) {
             GameState.TOUCH_TO_START -> renderSplash(canvas)
             GameState.PLAYING, GameState.SUPER_MODE -> renderPlaying(canvas)
-            GameState.HURT -> renderPlaying(canvas) // TODO: add flicker overlay
+            GameState.HURT -> renderPlaying(canvas)
             GameState.GAME_OVER -> renderGameOver(canvas)
         }
     }
@@ -258,10 +241,11 @@ class GameEngine(private val context: Context) {
      * Render the "Touch to Start" splash screen.
      */
     private fun renderSplash(canvas: Canvas) {
-        // Draw background (static, centered crop)
         renderBackground(canvas)
 
-        // Title text
+        // Show Pooch running on splash screen
+        pooch?.render(canvas, scaleX, scaleY, false)
+
         splashPaint.textSize = 80f * scaleX
         canvas.drawText(
             "POOCH RUNNER",
@@ -270,7 +254,6 @@ class GameEngine(private val context: Context) {
             splashPaint
         )
 
-        // Tap prompt
         splashPaint.textSize = 48f * scaleX
         canvas.drawText(
             "Tap to Start",
@@ -284,30 +267,13 @@ class GameEngine(private val context: Context) {
      * Render the active gameplay frame.
      */
     private fun renderPlaying(canvas: Canvas) {
+        val isSuper = (state == GameState.SUPER_MODE)
+
         // 1. Background layer
         renderBackground(canvas)
 
-        // 2. Player placeholder (green rectangle at player position until sprite rendering is built)
-        val playerScreenX = 200f * scaleX
-        val playerScreenY = playerY * scaleY
-        val playerW = 80f * scaleX
-        val playerH = 100f * scaleY
-
-        dstRect.set(
-            playerScreenX - playerW / 2f,
-            playerScreenY - playerH,
-            playerScreenX + playerW / 2f,
-            playerScreenY
-        )
-        debugPaint.style = Paint.Style.FILL
-        debugPaint.color = Color.argb(200, 139, 69, 19) // Brown placeholder for pooch
-        canvas.drawRect(dstRect, debugPaint)
-
-        // Ground line (debug)
-        debugPaint.style = Paint.Style.STROKE
-        debugPaint.color = Color.argb(128, 0, 255, 0)
-        val groundScreenY = GameConstants.GROUND_Y * scaleY
-        canvas.drawLine(0f, groundScreenY, screenWidth.toFloat(), groundScreenY, debugPaint)
+        // 2. Pooch player sprite (replaces debug square!)
+        pooch?.render(canvas, scaleX, scaleY, isSuper)
 
         // 3. HUD
         renderHUD(canvas)
@@ -331,7 +297,7 @@ class GameEngine(private val context: Context) {
         dstRect.set(0f, 0f, dstW, screenHeight.toFloat())
         canvas.drawBitmap(bg, srcRect, dstRect, null)
 
-        // Second pass: wrap-around portion (if the crop spans the image boundary)
+        // Second pass: wrap-around portion
         if (visibleWidth < bgCropWidth) {
             val remaining = bgCropWidth - visibleWidth
             srcRect.set(0, 0, remaining, bgCropHeight)
@@ -384,6 +350,8 @@ class GameEngine(private val context: Context) {
     fun release() {
         bgBitmap?.recycle()
         bgBitmap = null
+        SpriteAtlasManager.releaseAll()
+        pooch = null
         Log.i(TAG, "Engine resources released")
     }
 }
