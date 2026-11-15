@@ -11,23 +11,23 @@
   + [ ] smash
   + [ ] chew animation
   + [ ] grow big
-  + [ ] main bg
+  + [x] main bg
   + [ ] super high octane bg
 - [x] background
 - [x] sprite editor
 - [ ] sprite maps
-- [ ] app skeleton
-- [ ] initial engine & tap controls
-- [ ] tap to start screen vs main gameplay scene
-- [ ] run animation
-- [ ] jump animation and jumping
-- [ ] bg loader and scrolling
-- [ ] sprite map loader
+- [x] app skeleton
+- [x] initial engine & tap controls
+- [x] tap to start screen vs main gameplay scene
+- [x] run animation
+- [x] jump animation and jumping
+- [x] bg loader and scrolling
+- [x] sprite map loader
 - [ ] hit boxes
 - [ ] fudge counter
 - [ ] HP hearts counter
 - [ ] hurt animation
-- [ ] hame over animation
+- [ ] game over animation
 - [ ] shy guy hurt animation
 - [ ] power up scene on 10 fudges + fudge/shy guy towers (5s)
 - [ ] shy guys smashed counter
