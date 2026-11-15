@@ -90,16 +90,21 @@ class PoochPlayerHurtGameOverTest {
     }
 
     @Test
-    fun `game over anim flings player up, cycles jump_1-3 and mirrored states, then completes off screen`() {
+    fun `game over anim flings player up, cycles jump_1-3 and mirrored states, scales to targetScale 2_0f, then completes off screen`() {
+        val initialScale = player.scale
+        assertEquals(1.2f, initialScale, 0.001f)
+
         player.triggerGameOver()
         assertEquals(PoochPlayer.AnimState.GAME_OVER, player.animState)
         assertEquals(-1200f, player.velocityY, 0.001f)
+        assertEquals(2.0f, player.targetScale, 0.001f)
         assertFalse(player.isGameOverAnimFinished)
 
         // Cycle starts with jump_1 (not mirrored)
         player.update(0.01f, false)
         assertEquals("jump_1", player.currentFrame.id)
         assertFalse(player.isMirrored)
+        assertTrue(player.scale > initialScale)
 
         // Advance to jump_2
         player.update(PoochPlayer.GAME_OVER_FRAME_DURATION, false)
@@ -125,6 +130,12 @@ class PoochPlayerHurtGameOverTest {
         player.update(PoochPlayer.GAME_OVER_FRAME_DURATION, false)
         assertEquals("jump_3", player.currentFrame.id)
         assertTrue(player.isMirrored)
+
+        // Update past fling duration (0.85s) -> scale reaches targetScale (2.0f)
+        while (player.gameOverTimer < PoochPlayer.GAME_OVER_FLING_DURATION) {
+            player.update(0.02f, false)
+        }
+        assertEquals(2.0f, player.scale, 0.001f)
 
         // Update until player falls past bottom of screen
         while (!player.isGameOverAnimFinished) {

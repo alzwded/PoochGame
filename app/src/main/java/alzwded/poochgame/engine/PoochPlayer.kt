@@ -19,7 +19,7 @@ import android.graphics.RectF
  * - 1.0s Hurt state: uses jump_5, invincible, non-strobing quarter-second flicker
  *   (show 1/4s, hide 1/4s, show 1/4s, hide 1/4s).
  * - Game Over state: upward fling + gravity fall off screen, cycling jump_1..jump_3
- *   and their horizontally mirrored states.
+ *   and their horizontally mirrored states, linearly scaling towards 2.0f (foreground fling).
  * - Origin-anchored positioning at the middle of Pooch's head (which sits ~69 unscaled
  *   pixels above the ground contact line).
  * - Strictly zero-allocation per frame rendering loop.
@@ -58,6 +58,9 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
         /** Frame duration during Game Over death spin. */
         const val GAME_OVER_FRAME_DURATION = 0.08f
 
+        /** Duration over which Pooch scales to targetScale during game over death fling. */
+        const val GAME_OVER_FLING_DURATION = 0.85f
+
         /** Distance in unscaled sprite pixels from head origin to ground contact. */
         const val HEAD_TO_GROUND_OFFSET_UNSCALED = 69f
     }
@@ -74,12 +77,16 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
             ?: throw IllegalStateException("Missing jump_$index frame in pooch atlas")
     }
 
-    // --- Virtual Coordinates (1080x1728 workspace) ---
+    // --- Virtual Coordinates & Scale (1080x1728 workspace) ---
     var virtualX: Float = 260f
     var virtualY: Float = 0f
     var velocityY: Float = 0f
     var isOnGround: Boolean = true
         private set
+
+    var scale: Float = EntityRegistry.POOCH.baseScale
+    var targetScale: Float = EntityRegistry.POOCH.baseScale
+    private var initialGameOverScale: Float = EntityRegistry.POOCH.baseScale
 
     // --- Animation Timers & State ---
     var animState: AnimState = AnimState.WALK
@@ -144,6 +151,9 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
      */
     fun reset() {
         val baseScale = EntityRegistry.POOCH.baseScale
+        scale = baseScale
+        targetScale = baseScale
+        initialGameOverScale = baseScale
         virtualY = getGroundHeadY(baseScale)
         velocityY = 0f
         isOnGround = true
@@ -197,7 +207,7 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
 
     /**
      * Trigger the game over death animation: upward pop, gravity drop off screen,
-     * cycling jump_1..jump_3 and their mirrored states.
+     * cycling jump_1..jump_3 and their mirrored states, and scaling towards targetScale (2.0f).
      */
     fun triggerGameOver() {
         animState = AnimState.GAME_OVER
@@ -207,6 +217,8 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
         isInvincible = true
         isVisible = true
         isMirrored = false
+        initialGameOverScale = scale
+        targetScale = 2.0f
     }
 
     /**
@@ -222,6 +234,11 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
             EntityRegistry.POOCH.baseScale
         }
         val groundHeadY = getGroundHeadY(baseScale)
+
+        if (animState != AnimState.GAME_OVER) {
+            scale = baseScale
+            targetScale = baseScale
+        }
 
         when (animState) {
             AnimState.WALK -> {
@@ -332,10 +349,14 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
                 currentFrame = jumpFrames[frameIdx]
                 isMirrored = (cycleIdx >= 3)
                 isVisible = true
+
+                // Linearly interpolate scale towards targetScale (2.0f foreground fling)
+                val progress = (gameOverTimer / GAME_OVER_FLING_DURATION).coerceIn(0f, 1f)
+                scale = initialGameOverScale + (targetScale - initialGameOverScale) * progress
             }
         }
 
-        updateHitbox(baseScale)
+        updateHitbox(scale)
     }
 
     private fun updateHitbox(scale: Float) {
@@ -360,6 +381,7 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
      * Render the active Pooch sprite frame anchored to virtual coordinates.
      * ZERO memory allocations inside this method.
      */
+    @Suppress("UNUSED_PARAMETER")
     fun render(canvas: Canvas, scaleX: Float, scaleY: Float, isSuperMode: Boolean) {
         if (!isVisible) return
 
