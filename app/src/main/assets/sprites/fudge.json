@@ -1,0 +1,90 @@
+[
+  {
+    "id": "fudge_0",
+    "x": 80,
+    "y": 69,
+    "width": 219,
+    "height": 212,
+    "originX": 110,
+    "originY": 162,
+    "key": "#ffffff",
+    "threshold": 45
+  },
+  {
+    "id": "fudge_1",
+    "x": 469,
+    "y": 64,
+    "width": 219,
+    "height": 212,
+    "originX": 110,
+    "originY": 162,
+    "key": "#ffffff",
+    "threshold": 45
+  },
+  {
+    "id": "fudge_2",
+    "x": 80,
+    "y": 405,
+    "width": 219,
+    "height": 212,
+    "originX": 110,
+    "originY": 162,
+    "key": "#ffffff",
+    "threshold": 45
+  },
+  {
+    "id": "fudge_3",
+    "x": 467,
+    "y": 409,
+    "width": 219,
+    "height": 212,
+    "originX": 110,
+    "originY": 162,
+    "key": "#ffffff",
+    "threshold": 45
+  },
+  {
+    "id": "fudge_4",
+    "x": 77,
+    "y": 696,
+    "width": 219,
+    "height": 312,
+    "originX": 112,
+    "originY": 254,
+    "key": "#ffffff",
+    "threshold": 45
+  },
+  {
+    "id": "fudge_5",
+    "x": 468,
+    "y": 755,
+    "width": 219,
+    "height": 212,
+    "originX": 110,
+    "originY": 162,
+    "key": "#ffffff",
+    "threshold": 45
+  },
+  {
+    "id": "fudge_6",
+    "x": 76,
+    "y": 1096,
+    "width": 233,
+    "height": 212,
+    "originX": 110,
+    "originY": 162,
+    "key": "#ffffff",
+    "threshold": 45
+  },
+  {
+    "id": "fudge_7",
+    "x": 426,
+    "y": 1066,
+    "width": 302,
+    "height": 240,
+    "originX": 147,
+    "originY": 183,
+    "key": "#ffffff",
+    "threshold": 45
+  }
+]
