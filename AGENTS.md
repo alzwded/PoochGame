@@ -246,7 +246,7 @@ object EntityRegistry {
   - [ ] Grow big powerup sound (`grow_big.wav`)
   - [ ] Heart pickup sound (`heart_pickup.wav`)
   - [x] Main background music track (`bg_main.m4a`)
-  - [ ] Super mode high-octane BGM track (`bg_super.m4a`)
+  - [x] Super mode high-octane BGM track (`bg_super.m4a`)
 
 ### Phase 2: Engine Core & Lifecycle
 - [x] Android App Skeleton (Min API 31, Target API 36, Portrait full-screen activity)
@@ -256,7 +256,7 @@ object EntityRegistry {
 - [x] Landscape Background Loader with 10:16 Crop Viewport & Infinite Scroll Loop
 
 ### Phase 3: Gameplay & Character Kinematics
-- [ ] Scene State Controller (`TOUCH_TO_START` vs `PLAYING`)
+- [x] Scene State Controller (`TOUCH_TO_START` vs `PLAYING`)
 - [x] Pooch Run Animation Controller (indexed frame lookup)
 - [x] Jump Physics & Jump Animation Trigger
 - [ ] AABB Hitboxes & Visual Debug Draw Toggles
@@ -265,8 +265,8 @@ object EntityRegistry {
 ### Phase 4: UI, Counters & Power-ups
 - [ ] Fudge Counter UI Display
 - [ ] HP Hearts Counter UI Display (3 Hearts max) & Rare Heart pickup restoration logic
-- [ ] Hurt Animation & Invincibility Frames
-- [ ] Shy Guy Hurt / Stun Animation
+- [x] Hurt Animation & Invincibility Frames
+- [x] Shy Guy Hurt / Stun Animation
 - [ ] Super Mode State Machine:
   - Trigger at 10 Fudges
   - Character scale-up (1.8x - 2.0x beyond `baseScale`) & speed boost
@@ -275,6 +275,6 @@ object EntityRegistry {
 - [ ] Shy Guys Smashed Counter UI
 
 ### Phase 5: Game Over & Polish
-- [ ] Game Over Mario-style Death Animation (Upward pop + downward gravity fall out of portrait screen)
+- [x] Game Over Mario-style Death Animation (Upward pop + downward gravity fall out of portrait screen)
 - [ ] Sound Manager Integration (BGM switching, low-latency SFX)
 - [ ] Frame Budget & Zero-Allocation Memory Audit ($60\text{ FPS}$ / $30\text{ FPS}$)

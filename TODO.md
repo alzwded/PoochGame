@@ -15,7 +15,7 @@
   + [x] super high octane bg
 - [x] background
 - [x] sprite editor
-- [ ] sprite maps
+- [x] sprite maps
 - [x] app skeleton
 - [x] initial engine & tap controls
 - [x] tap to start screen vs main gameplay scene
