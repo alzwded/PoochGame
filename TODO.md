@@ -12,7 +12,7 @@
   + [ ] chew animation
   + [ ] grow big
   + [x] main bg
-  + [ ] super high octane bg
+  + [x] super high octane bg
 - [x] background
 - [x] sprite editor
 - [ ] sprite maps
