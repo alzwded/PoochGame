@@ -10,7 +10,7 @@ package alzwded.poochgame.engine
 data class EntityTypeConfig(
     val atlasKey: String,
     val baseScale: Float,
-    val hitboxInsetFactor: Float = 0.8f
+    val hitboxInsetFactor: Float = 0.5f
 )
 
 /**

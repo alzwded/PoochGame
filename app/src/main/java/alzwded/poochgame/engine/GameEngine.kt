@@ -210,8 +210,13 @@ class GameEngine(private val context: Context) {
             GameConstants.BASE_SCROLL_SPEED
         }
 
-        // 1. Scroll background
-        bgScrollX += scrollSpeed * dt
+        // 1. Scroll background (convert virtual px/s to bitmap px/s)
+        val bitmapScrollSpeed = if (bgCropWidth > 0) {
+            scrollSpeed * (bgCropWidth.toFloat() / GameConstants.VIRTUAL_WIDTH)
+        } else {
+            scrollSpeed
+        }
+        bgScrollX += bitmapScrollSpeed * dt
         bgBitmap?.let { bg ->
             val scrollableWidth = bg.width.toFloat()
             if (bgScrollX >= scrollableWidth) {
