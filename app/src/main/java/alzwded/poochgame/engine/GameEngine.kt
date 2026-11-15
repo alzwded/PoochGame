@@ -62,12 +62,15 @@ class GameEngine(private val context: Context) {
         setShadowLayer(6f, 3f, 3f, Color.BLACK)
     }
 
-    // --- Player Character ---
+    // --- Entities & Spawner ---
     var pooch: PoochPlayer? = null
+        private set
+    var spawnManager: SpawnManager? = null
         private set
 
     // --- Game Stats ---
-    private var playerHP: Int = GameConstants.MAX_HP
+    var playerHP: Int = GameConstants.MAX_HP
+        private set
     private var fudgeCount: Int = 0
     private var score: Int = 0
 
@@ -100,7 +103,6 @@ class GameEngine(private val context: Context) {
             bgStream.close()
 
             bgBitmap?.let { bg ->
-                // Calculate the 10:16 crop region from the landscape background
                 bgCropHeight = bg.height
                 bgCropWidth = (bgCropHeight * 10f / 16f).toInt()
                 Log.i(TAG, "Background loaded: ${bg.width}x${bg.height}, crop: ${bgCropWidth}x$bgCropHeight")
@@ -122,13 +124,28 @@ class GameEngine(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load pooch atlas", e)
         }
+
+        // 3. Load Shy Guy sprite atlas and initialize SpawnManager
+        try {
+            val shyguyAtlas = SpriteAtlasManager.loadAtlas(
+                context,
+                EntityRegistry.SHY_GUY.atlasKey,
+                "sprites/shagay.jpg",
+                "sprites/shagay.json"
+            )
+            spawnManager = SpawnManager(shyguyAtlas)
+            Log.i(TAG, "SpawnManager initialized with atlas '${shyguyAtlas.key}'")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load shyguy atlas", e)
+        }
     }
 
     /**
-     * Reset player state for a new game.
+     * Reset player state and clear entities for a new game.
      */
-    private fun resetPlayer() {
+    fun resetPlayer() {
         pooch?.reset()
+        spawnManager?.reset()
         playerHP = GameConstants.MAX_HP
         fudgeCount = 0
         score = 0
@@ -146,19 +163,11 @@ class GameEngine(private val context: Context) {
                 SoundManager.playMainBgm()
                 Log.d(TAG, "Tap → PLAYING")
             }
-            GameState.PLAYING, GameState.SUPER_MODE -> {
-                val jumped = pooch?.jump() ?: false
-                if (jumped) {
-                    Log.d(TAG, "Pooch jumped!")
-                }
+            GameState.PLAYING, GameState.SUPER_MODE, GameState.HURT -> {
+                pooch?.jump()
             }
             GameState.GAME_OVER -> {
-                state = GameState.TOUCH_TO_START
-                resetPlayer()
-                Log.d(TAG, "Tap → TOUCH_TO_START")
-            }
-            GameState.HURT -> {
-                // Ignore taps during hurt animation
+                // Ignore taps during death animation; engine resets automatically
             }
         }
     }
@@ -173,21 +182,19 @@ class GameEngine(private val context: Context) {
 
         when (state) {
             GameState.TOUCH_TO_START -> {
-                // Idle walk on splash screen
                 pooch?.update(dt * 0.75f, false)
             }
-            GameState.PLAYING -> {
-                updatePlaying(dt)
-            }
-            GameState.SUPER_MODE -> {
-                // TODO: Super mode timer & transitions
+            GameState.PLAYING, GameState.SUPER_MODE -> {
                 updatePlaying(dt)
             }
             GameState.HURT -> {
-                // TODO: Hurt timer / invincibility frames
+                updatePlaying(dt)
+                if (pooch?.animState != PoochPlayer.AnimState.HURT) {
+                    state = GameState.PLAYING
+                }
             }
             GameState.GAME_OVER -> {
-                // TODO: Death animation physics
+                updateGameOver(dt)
             }
         }
     }
@@ -203,10 +210,8 @@ class GameEngine(private val context: Context) {
             GameConstants.BASE_SCROLL_SPEED
         }
 
-        // Scroll background
+        // 1. Scroll background
         bgScrollX += scrollSpeed * dt
-
-        // Wrap background scroll for seamless looping
         bgBitmap?.let { bg ->
             val scrollableWidth = bg.width.toFloat()
             if (bgScrollX >= scrollableWidth) {
@@ -214,14 +219,57 @@ class GameEngine(private val context: Context) {
             }
         }
 
-        // Update Pooch kinematics & animation
-        pooch?.update(dt, isSuper)
+        // 2. Update Pooch kinematics & animation
+        val p = pooch
+        p?.update(dt, isSuper)
 
-        // Increment score over time
+        // 3. Update spawner & enemies
+        val sm = spawnManager
+        val playerX = p?.virtualX ?: 0f
+        sm?.update(dt, scrollSpeed, playerX)
+
+        // 4. Collision check (only if player is vulnerable)
+        if (p != null && sm != null && p.isVulnerable()) {
+            val collidedEnemy = sm.checkPlayerCollision(p.hitbox)
+            if (collidedEnemy != null) {
+                collidedEnemy.onPlayerCollision()
+                playerHP--
+
+                if (playerHP <= 0) {
+                    playerHP = 0
+                    state = GameState.GAME_OVER
+                    p.triggerGameOver()
+                    Log.d(TAG, "Collision! All hearts depleted -> GAME_OVER")
+                } else {
+                    state = GameState.HURT
+                    p.triggerHurt()
+                    Log.d(TAG, "Collision! Hearts remaining: $playerHP -> HURT")
+                }
+            }
+        }
+
+        // 5. Increment score over time
         score += (scrollSpeed * dt * 0.1f).toInt()
+    }
 
-        // TODO: Obstacle/collectible spawning
-        // TODO: Collision detection
+    /**
+     * Updates game over death animation: player drops off screen under gravity,
+     * then resets to TOUCH_TO_START screen.
+     */
+    private fun updateGameOver(dt: Float) {
+        val p = pooch ?: return
+        p.update(dt, false)
+
+        // Allow any active hurt enemies to finish their trajectory
+        spawnManager?.update(dt, 0f, p.virtualX)
+
+        // When death fall completes off bottom of screen, return to initial splash screen
+        if (p.isGameOverAnimFinished) {
+            state = GameState.TOUCH_TO_START
+            resetPlayer()
+            SoundManager.playMainBgm()
+            Log.d(TAG, "Game Over death animation finished -> returned to TOUCH_TO_START")
+        }
     }
 
     /**
@@ -233,8 +281,7 @@ class GameEngine(private val context: Context) {
 
         when (state) {
             GameState.TOUCH_TO_START -> renderSplash(canvas)
-            GameState.PLAYING, GameState.SUPER_MODE -> renderPlaying(canvas)
-            GameState.HURT -> renderPlaying(canvas)
+            GameState.PLAYING, GameState.SUPER_MODE, GameState.HURT -> renderPlaying(canvas)
             GameState.GAME_OVER -> renderGameOver(canvas)
         }
     }
@@ -245,7 +292,6 @@ class GameEngine(private val context: Context) {
     private fun renderSplash(canvas: Canvas) {
         renderBackground(canvas)
 
-        // Show Pooch running on splash screen
         pooch?.render(canvas, scaleX, scaleY, false)
 
         splashPaint.textSize = 80f * scaleX
@@ -274,10 +320,30 @@ class GameEngine(private val context: Context) {
         // 1. Background layer
         renderBackground(canvas)
 
-        // 2. Pooch player sprite (replaces debug square!)
+        // 2. Enemies layer
+        spawnManager?.render(canvas, scaleX, scaleY)
+
+        // 3. Pooch player sprite (handles hurt flicker automatically)
         pooch?.render(canvas, scaleX, scaleY, isSuper)
 
-        // 3. HUD
+        // 4. HUD
+        renderHUD(canvas)
+    }
+
+    /**
+     * Render the game over sequence: shows world and death animation.
+     */
+    private fun renderGameOver(canvas: Canvas) {
+        // 1. Background layer (frozen in place)
+        renderBackground(canvas)
+
+        // 2. Enemies layer
+        spawnManager?.render(canvas, scaleX, scaleY)
+
+        // 3. Pooch player sprite in death spin
+        pooch?.render(canvas, scaleX, scaleY, false)
+
+        // 4. HUD
         renderHUD(canvas)
     }
 
@@ -289,7 +355,6 @@ class GameEngine(private val context: Context) {
 
         val scrollPixel = bgScrollX.toInt() % bg.width
 
-        // First pass: main visible portion
         val srcLeft = scrollPixel
         val srcRight = (scrollPixel + bgCropWidth).coerceAtMost(bg.width)
         val visibleWidth = srcRight - srcLeft
@@ -299,7 +364,6 @@ class GameEngine(private val context: Context) {
         dstRect.set(0f, 0f, dstW, screenHeight.toFloat())
         canvas.drawBitmap(bg, srcRect, dstRect, null)
 
-        // Second pass: wrap-around portion
         if (visibleWidth < bgCropWidth) {
             val remaining = bgCropWidth - visibleWidth
             srcRect.set(0, 0, remaining, bgCropHeight)
@@ -318,7 +382,9 @@ class GameEngine(private val context: Context) {
         canvas.drawText("Score: $score", 20f * scaleX, 50f * scaleY, textPaint)
 
         // Hearts
-        val heartsText = "❤".repeat(playerHP) + "♡".repeat(GameConstants.MAX_HP - playerHP)
+        val fullHearts = playerHP.coerceIn(0, GameConstants.MAX_HP)
+        val emptyHearts = (GameConstants.MAX_HP - fullHearts).coerceAtLeast(0)
+        val heartsText = "❤".repeat(fullHearts) + "♡".repeat(emptyHearts)
         canvas.drawText(heartsText, 20f * scaleX, 110f * scaleY, textPaint)
 
         // Fudge counter
@@ -331,22 +397,6 @@ class GameEngine(private val context: Context) {
     }
 
     /**
-     * Render the game over screen.
-     */
-    private fun renderGameOver(canvas: Canvas) {
-        renderBackground(canvas)
-
-        splashPaint.textSize = 80f * scaleX
-        canvas.drawText("GAME OVER", screenWidth / 2f, screenHeight * 0.4f, splashPaint)
-
-        splashPaint.textSize = 48f * scaleX
-        canvas.drawText("Score: $score", screenWidth / 2f, screenHeight * 0.5f, splashPaint)
-
-        splashPaint.textSize = 40f * scaleX
-        canvas.drawText("Tap to Restart", screenWidth / 2f, screenHeight * 0.6f, splashPaint)
-    }
-
-    /**
      * Release all loaded resources.
      */
     fun release() {
@@ -354,6 +404,8 @@ class GameEngine(private val context: Context) {
         bgBitmap = null
         SpriteAtlasManager.releaseAll()
         pooch = null
+        spawnManager?.reset()
+        spawnManager = null
         Log.i(TAG, "Engine resources released")
     }
 }

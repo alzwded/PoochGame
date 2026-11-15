@@ -9,13 +9,17 @@ import android.graphics.RectF
  * Controller and renderer for Pooch (the player character).
  *
  * Implements:
- * - 6-frame looping walk cycle (cycling every 1/6th of a second).
+ * - 5-frame looping walk cycle (walk_0..walk_4) cycling every 1/6th of a second.
  * - 5-phase jump progression:
  *   1. jump_0 used for windup (~3-4 frames @ 60 FPS).
  *   2. Cycle through jump_1, jump_2, jump_3 until reaching the apex (vy >= 0).
  *   3. jump_4 during downward fall until landing.
  *   4. jump_5 upon landing for a few frames (~5 frames @ 60 FPS).
  *   5. Seamless return to walk cycle.
+ * - 1.0s Hurt state: uses jump_5, invincible, non-strobing quarter-second flicker
+ *   (show 1/4s, hide 1/4s, show 1/4s, hide 1/4s).
+ * - Game Over state: upward fling + gravity fall off screen, cycling jump_1..jump_3
+ *   and their horizontally mirrored states.
  * - Origin-anchored positioning at the middle of Pooch's head (which sits ~69 unscaled
  *   pixels above the ground contact line).
  * - Strictly zero-allocation per frame rendering loop.
@@ -27,7 +31,9 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
         JUMP_WINDUP,
         JUMP_ASCENT,
         JUMP_FALL,
-        JUMP_LANDING
+        JUMP_LANDING,
+        HURT,
+        GAME_OVER
     }
 
     companion object {
@@ -42,6 +48,15 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
 
         /** Duration of landing recovery frame (jump_5) in seconds. */
         const val JUMP_LANDING_DURATION = 0.08f
+
+        /** Total duration of hurt state in seconds. */
+        const val HURT_DURATION = 1.0f
+
+        /** Flicker quarter-interval for hurt state (0.25s). */
+        const val HURT_FLICKER_INTERVAL = 0.25f
+
+        /** Frame duration during Game Over death spin. */
+        const val GAME_OVER_FRAME_DURATION = 0.08f
 
         /** Distance in unscaled sprite pixels from head origin to ground contact. */
         const val HEAD_TO_GROUND_OFFSET_UNSCALED = 69f
@@ -76,10 +91,30 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
         private set
     var landingTimer: Float = 0f
         private set
+    var hurtTimer: Float = 0f
+        private set
+    var gameOverTimer: Float = 0f
+        private set
+
+    var isInvincible: Boolean = false
+        private set
+
+    var isVisible: Boolean = true
+        private set
+
+    var isMirrored: Boolean = false
+        private set
 
     /** Currently active frame to render. */
     var currentFrame: SpriteFrame = walkFrames[0]
         private set
+
+    /** Inset collision bounds for fair play. */
+    val hitbox: RectF = RectF()
+
+    /** True if the game over death fall has moved completely off screen bottom. */
+    val isGameOverAnimFinished: Boolean
+        get() = (animState == AnimState.GAME_OVER && virtualY > GameConstants.VIRTUAL_HEIGHT + 250f)
 
     // Pre-allocated draw rects & paint (zero per-frame allocations)
     private val srcRect = Rect()
@@ -98,6 +133,13 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
     }
 
     /**
+     * True if the player is vulnerable to enemy collisions.
+     */
+    fun isVulnerable(): Boolean {
+        return !isInvincible && animState != AnimState.HURT && animState != AnimState.GAME_OVER
+    }
+
+    /**
      * Reset player position and animation state for a new game or respawn.
      */
     fun reset() {
@@ -109,7 +151,13 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
         walkTimer = 0f
         jumpTimer = 0f
         landingTimer = 0f
+        hurtTimer = 0f
+        gameOverTimer = 0f
+        isInvincible = false
+        isVisible = true
+        isMirrored = false
         currentFrame = walkFrames[0]
+        updateHitbox(baseScale)
     }
 
     /**
@@ -118,7 +166,10 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
      * @return true if jump was triggered, false otherwise.
      */
     fun jump(): Boolean {
-        if (!isOnGround && animState != AnimState.JUMP_LANDING) {
+        if ((!isOnGround && animState != AnimState.JUMP_LANDING) ||
+            animState == AnimState.HURT ||
+            animState == AnimState.GAME_OVER
+        ) {
             return false
         }
 
@@ -128,6 +179,34 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
         velocityY = GameConstants.JUMP_IMPULSE // -1600 px/s
         currentFrame = jumpFrames[0]
         return true
+    }
+
+    /**
+     * Trigger the 1.0s hurt state: uses jump_5, enters invincibility, and flickers.
+     */
+    fun triggerHurt() {
+        if (animState == AnimState.GAME_OVER) return
+
+        animState = AnimState.HURT
+        hurtTimer = 0f
+        isInvincible = true
+        isVisible = true
+        isMirrored = false
+        currentFrame = jumpFrames[5]
+    }
+
+    /**
+     * Trigger the game over death animation: upward pop, gravity drop off screen,
+     * cycling jump_1..jump_3 and their mirrored states.
+     */
+    fun triggerGameOver() {
+        animState = AnimState.GAME_OVER
+        gameOverTimer = 0f
+        velocityY = -1200f
+        isOnGround = false
+        isInvincible = true
+        isVisible = true
+        isMirrored = false
     }
 
     /**
@@ -147,7 +226,7 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
         when (animState) {
             AnimState.WALK -> {
                 val frameDuration = if (isSuperMode) {
-                    WALK_FRAME_DURATION * 0.5f // Double tempo in super mode
+                    WALK_FRAME_DURATION * 0.5f
                 } else {
                     WALK_FRAME_DURATION
                 }
@@ -178,14 +257,12 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
                 virtualY += velocityY * dt
 
                 if (velocityY >= 0f) {
-                    // Apex reached! Transition to downward fall
                     animState = AnimState.JUMP_FALL
                     currentFrame = jumpFrames[4]
                 } else {
-                    // Cycle jump_1, jump_2, jump_3 during ascent
                     val ascentElapsed = jumpTimer - JUMP_WINDUP_DURATION
                     val progress = (ascentElapsed / JUMP_ASCENT_DURATION).coerceIn(0f, 0.999f)
-                    val frameIdx = 1 + (progress * 3).toInt() // 1, 2, or 3
+                    val frameIdx = 1 + (progress * 3).toInt()
                     currentFrame = jumpFrames[frameIdx.coerceIn(1, 3)]
                 }
             }
@@ -195,7 +272,6 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
                 virtualY += velocityY * dt
                 currentFrame = jumpFrames[4]
 
-                // Check landing
                 if (virtualY >= groundHeadY) {
                     virtualY = groundHeadY
                     velocityY = 0f
@@ -216,7 +292,68 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
                     currentFrame = walkFrames[0]
                 }
             }
+
+            AnimState.HURT -> {
+                hurtTimer += dt
+                currentFrame = jumpFrames[5] // jump_5 during hurt
+
+                // Non-strobing flicker: show 1/4s, hide 1/4s, show 1/4s, hide 1/4s
+                val quarter = (hurtTimer / HURT_FLICKER_INTERVAL).toInt()
+                isVisible = (quarter % 2 == 0)
+
+                // Maintain physics if hurt mid-air
+                if (!isOnGround) {
+                    velocityY += GameConstants.GRAVITY * dt
+                    virtualY += velocityY * dt
+                    if (virtualY >= groundHeadY) {
+                        virtualY = groundHeadY
+                        velocityY = 0f
+                        isOnGround = true
+                    }
+                }
+
+                if (hurtTimer >= HURT_DURATION) {
+                    animState = AnimState.WALK
+                    isInvincible = false
+                    isVisible = true
+                    walkTimer = 0f
+                    currentFrame = walkFrames[0]
+                }
+            }
+
+            AnimState.GAME_OVER -> {
+                gameOverTimer += dt
+                velocityY += GameConstants.GRAVITY * dt
+                virtualY += velocityY * dt
+
+                // Cycle jump_1, jump_2, jump_3, mirrored jump_1, mirrored jump_2, mirrored jump_3
+                val cycleIdx = ((gameOverTimer / GAME_OVER_FRAME_DURATION).toInt()) % 6
+                val frameIdx = (cycleIdx % 3) + 1 // maps to 1, 2, or 3
+                currentFrame = jumpFrames[frameIdx]
+                isMirrored = (cycleIdx >= 3)
+                isVisible = true
+            }
         }
+
+        updateHitbox(baseScale)
+    }
+
+    private fun updateHitbox(scale: Float) {
+        val f = currentFrame
+        val w = f.width * scale
+        val h = f.height * scale
+        val left = virtualX - (f.originX * scale)
+        val top = virtualY - (f.originY * scale)
+        val right = left + w
+        val bottom = top + h
+
+        val insetFactor = EntityRegistry.POOCH.hitboxInsetFactor
+        val insetX = w * (1f - insetFactor) * 0.5f
+        val insetY = h * (1f - insetFactor) * 0.5f
+        hitbox.left = left + insetX
+        hitbox.top = top + insetY
+        hitbox.right = right - insetX
+        hitbox.bottom = bottom - insetY
     }
 
     /**
@@ -224,29 +361,30 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
      * ZERO memory allocations inside this method.
      */
     fun render(canvas: Canvas, scaleX: Float, scaleY: Float, isSuperMode: Boolean) {
+        if (!isVisible) return
+
         val scale = if (isSuperMode) {
             EntityRegistry.POOCH.baseScale * GameConstants.SUPER_MODE_SCALE
         } else {
             EntityRegistry.POOCH.baseScale
         }
 
-        val frame = currentFrame
-
-        // Anchor frame at (virtualX, virtualY) via (originX, originY)
-        val virtualLeft = virtualX - (frame.originX * scale)
-        val virtualTop = virtualY - (frame.originY * scale)
-        val virtualRight = virtualLeft + (frame.width * scale)
-        val virtualBottom = virtualTop + (frame.height * scale)
-
-        srcRect.set(frame.x, frame.y, frame.x + frame.width, frame.y + frame.height)
-        dstRect.set(
-            virtualLeft * scaleX,
-            virtualTop * scaleY,
-            virtualRight * scaleX,
-            virtualBottom * scaleY
-        )
-
         val bitmap = atlas.bitmap ?: return
-        canvas.drawBitmap(bitmap, srcRect, dstRect, spritePaint)
+        val mirrored = (animState == AnimState.GAME_OVER && isMirrored)
+
+        SpriteRenderer.drawFrame(
+            canvas = canvas,
+            bitmap = bitmap,
+            frame = currentFrame,
+            virtualX = virtualX,
+            virtualY = virtualY,
+            scale = scale,
+            scaleX = scaleX,
+            scaleY = scaleY,
+            mirrored = mirrored,
+            paint = spritePaint,
+            srcRect = srcRect,
+            dstRect = dstRect
+        )
     }
 }

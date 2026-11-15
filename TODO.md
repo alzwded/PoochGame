@@ -23,11 +23,12 @@
 - [x] jump animation and jumping
 - [x] bg loader and scrolling
 - [x] sprite map loader
-- [ ] hit boxes
+- [x] hit boxes
 - [ ] fudge counter
 - [ ] HP hearts counter
-- [ ] hurt animation
-- [ ] game over animation
-- [ ] shy guy hurt animation
+- [x] hurt animation
+- [x] game over animation
+- [x] shy guy hurt animation
 - [ ] power up scene on 10 fudges + fudge/shy guy towers (5s)
 - [ ] shy guys smashed counter
+- [ ] on main screen, have pooch jumping around and shagay waving :-)
