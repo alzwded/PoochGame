@@ -1,0 +1,134 @@
+[
+  {
+    "id": "walk_0",
+    "x": 57,
+    "y": 86,
+    "width": 134,
+    "height": 166,
+    "originX": 65,
+    "originY": 147,
+    "key": "#ffffff",
+    "threshold": 28
+  },
+  {
+    "id": "walk_1",
+    "x": 313,
+    "y": 85,
+    "width": 134,
+    "height": 166,
+    "originX": 65,
+    "originY": 147,
+    "key": "#ffffff",
+    "threshold": 28
+  },
+  {
+    "id": "walk_4",
+    "x": 579,
+    "y": 86,
+    "width": 134,
+    "height": 166,
+    "originX": 65,
+    "originY": 147,
+    "key": "#ffffff",
+    "threshold": 28
+  },
+  {
+    "id": "walk_2",
+    "x": 64,
+    "y": 298,
+    "width": 134,
+    "height": 166,
+    "originX": 65,
+    "originY": 147,
+    "key": "#ffffff",
+    "threshold": 28
+  },
+  {
+    "id": "walk_5",
+    "x": 324,
+    "y": 303,
+    "width": 134,
+    "height": 166,
+    "originX": 65,
+    "originY": 147,
+    "key": "#ffffff",
+    "threshold": 28
+  },
+  {
+    "id": "walk_3",
+    "x": 576,
+    "y": 300,
+    "width": 134,
+    "height": 166,
+    "originX": 65,
+    "originY": 147,
+    "key": "#ffffff",
+    "threshold": 28
+  },
+  {
+    "id": "wave_0",
+    "x": 41,
+    "y": 797,
+    "width": 176,
+    "height": 189,
+    "originX": 84,
+    "originY": 164,
+    "key": "#ffffff",
+    "threshold": 28
+  },
+  {
+    "id": "ohoh_0",
+    "x": 300,
+    "y": 785,
+    "width": 176,
+    "height": 189,
+    "originX": 90,
+    "originY": 165,
+    "key": "#ffffff",
+    "threshold": 28
+  },
+  {
+    "id": "ohoh_1",
+    "x": 547,
+    "y": 772,
+    "width": 197,
+    "height": 203,
+    "originX": 105,
+    "originY": 175,
+    "key": "#ffffff",
+    "threshold": 28
+  },
+  {
+    "id": "ohoh_2",
+    "x": 45,
+    "y": 1074,
+    "width": 177,
+    "height": 203,
+    "originX": 105,
+    "originY": 175,
+    "key": "#ffffff",
+    "threshold": 28
+  },
+  {
+    "id": "ohoh_3",
+    "x": 284,
+    "y": 1068,
+    "width": 208,
+    "height": 204,
+    "originX": 114,
+    "originY": 172,
+    "key": "#ffffff",
+    "threshold": 28
+  },
+  {
+    "id": "wave_1",
+    "x": 554,
+    "y": 1091,
+    "width": 186,
+    "height": 195,
+    "originX": 91,
+    "originY": 174,
+    "key": "#ffffff",
+    "threshold": 28
+  }
+]
