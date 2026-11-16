@@ -44,7 +44,7 @@ class SpawnManagerTest {
             )
         }
         atlas = SpriteAtlas("shyguy", null, frames)
-        spawner = SpawnManager(atlas)
+        spawner = SpawnManager(atlas, atlas)
     }
 
     @Test
@@ -82,7 +82,7 @@ class SpawnManagerTest {
 
         // Advance 1 slot using realistic frame steps
         var elapsed = 0f
-        while (elapsed < slotTime) {
+        while (elapsed <= slotTime) {
             spawner.update(frameDt, 550f, 260f)
             elapsed += frameDt
         }
@@ -93,7 +93,7 @@ class SpawnManagerTest {
 
         // Advance slot 1 (odd slot -> collectible slot, no enemy spawn)
         elapsed = 0f
-        while (elapsed < slotTime) {
+        while (elapsed <= slotTime) {
             spawner.update(frameDt, 550f, 260f)
             elapsed += frameDt
         }

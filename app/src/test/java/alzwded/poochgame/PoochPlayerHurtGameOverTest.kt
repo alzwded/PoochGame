@@ -145,4 +145,21 @@ class PoochPlayerHurtGameOverTest {
         assertTrue(player.isGameOverAnimFinished)
         assertTrue(player.virtualY > GameConstants.VIRTUAL_HEIGHT + 250f)
     }
+
+    @Test
+    fun `game over scale updates correctly when update is called`() {
+        player.triggerGameOver()
+        assertEquals(1.2f, player.scale, 0.001f)
+
+        // Advance halfway through fling duration
+        val halfDuration = PoochPlayer.GAME_OVER_FLING_DURATION / 2f
+        player.update(halfDuration, false)
+
+        val expectedScale = 1.2f + (2.0f - 1.2f) * 0.5f
+        assertEquals(expectedScale, player.scale, 0.01f)
+
+        // Advance past full fling duration
+        player.update(halfDuration + 0.1f, false)
+        assertEquals(2.0f, player.scale, 0.001f)
+    }
 }

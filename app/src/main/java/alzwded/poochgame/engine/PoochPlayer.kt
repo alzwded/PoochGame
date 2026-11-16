@@ -388,12 +388,6 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
     fun render(canvas: Canvas, scaleX: Float, scaleY: Float, isSuperMode: Boolean) {
         if (!isVisible) return
 
-        val scale = if (isSuperMode) {
-            EntityRegistry.POOCH.baseScale * GameConstants.SUPER_MODE_SCALE
-        } else {
-            EntityRegistry.POOCH.baseScale
-        }
-
         val bitmap = atlas.bitmap ?: return
         val mirrored = (animState == AnimState.GAME_OVER && isMirrored)
 
