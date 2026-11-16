@@ -48,7 +48,12 @@ object SpriteRenderer {
         val virtualRight = virtualLeft + (frame.width * scale)
         val virtualBottom = virtualTop + (frame.height * scale)
 
-        srcRect.set(frame.x, frame.y, frame.x + frame.width, frame.y + frame.height)
+        srcRect.set(
+            frame.x,
+            frame.y,
+            (frame.x + frame.width).coerceAtLeast(frame.x),
+            (frame.y + frame.height).coerceAtLeast(frame.y)
+        )
         dstRect.set(
             virtualLeft * scaleX,
             virtualTop * scaleY,

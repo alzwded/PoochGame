@@ -49,7 +49,7 @@ object SpriteAtlasManager {
         inputStream.close()
 
         // 3. Process chroma-key transparency across frame regions
-        val keyedBitmap = applyChromaKey(rawBitmap, frames)
+        val keyedBitmap = processAtlasWithFrameMask(rawBitmap, frames)
         if (keyedBitmap != rawBitmap && !rawBitmap.isRecycled) {
             rawBitmap.recycle()
         }
@@ -61,7 +61,10 @@ object SpriteAtlasManager {
     }
 
     /**
-     * Applies 3D RGB Euclidean Distance chroma keying to frame bounding regions.
+     * Creates a transparent atlas where all non-frame regions remain 0x00000000,
+     * and pixels inside frame bounds are chroma-keyed.
+     *
+     * Applies 3D RGB Euclidean Distance chroma keying to frame bounding regions (and without)
      *
      * Ensures:
      * - Transparent pixels have A=0, R=0, G=0, B=0 (premultiplied 0x00000000).
@@ -71,20 +74,26 @@ object SpriteAtlasManager {
      *   distSq = (r - targetR)^2 + (g - targetG)^2 + (b - targetB)^2
      *   if (distSq <= threshold^2) pixel = 0 (Color.TRANSPARENT)
      */
-    fun applyChromaKey(source: Bitmap, frames: List<SpriteFrame>): Bitmap {
+    fun processAtlasWithFrameMask(
+        source: Bitmap,
+        frames: List<SpriteFrame>,
+        defaultChromaKey: String = "#FFFFFF",
+        defaultThreshold: Int = 45
+    ): Bitmap {
         val width = source.width
         val height = source.height
-        val allPixels = IntArray(width * height)
-        source.getPixels(allPixels, 0, width, 0, 0, width, height)
 
-        var totalKeyed = 0
+        val sourcePixels = IntArray(width * height)
+        source.getPixels(sourcePixels, 0, width, 0, 0, width, height)
+
+        // Output buffer defaults to 0x00000000 (fully transparent) across the entire atlas
+        val outputPixels = IntArray(width * height)
 
         for (frame in frames) {
-            val hexColor = frame.chromaKey ?: continue
-            val threshold = frame.chromaThreshold
-            if (threshold <= 0) continue
+            val hexColor = frame.chromaKey ?: defaultChromaKey
+            val threshold = if (frame.chromaThreshold > 0) frame.chromaThreshold else defaultThreshold
 
-            val cleanHex = if (hexColor.startsWith("#")) hexColor.substring(1) else hexColor
+            val cleanHex = hexColor.removePrefix("#")
             if (cleanHex.length < 6) continue
 
             val targetR = Integer.parseInt(cleanHex.substring(0, 2), 16)
@@ -97,13 +106,12 @@ object SpriteAtlasManager {
             val fw = frame.width.coerceAtMost(width - fx)
             val fh = frame.height.coerceAtMost(height - fy)
 
-            if (fw <= 0 || fh <= 0) continue
-
             for (row in fy until fy + fh) {
                 val rowOffset = row * width
                 for (col in fx until fx + fw) {
                     val idx = rowOffset + col
-                    val p = allPixels[idx]
+                    val p = sourcePixels[idx]
+
                     val r = (p shr 16) and 0xFF
                     val g = (p shr 8) and 0xFF
                     val b = p and 0xFF
@@ -111,20 +119,17 @@ object SpriteAtlasManager {
                     val dr = r - targetR
                     val dg = g - targetG
                     val db = b - targetB
-                    val distSq = dr * dr + dg * dg + db * db
 
-                    if (distSq <= thresholdSq) {
-                        allPixels[idx] = 0 // Color.TRANSPARENT: completely transparent (0x00000000)
-                        totalKeyed++
+                    // Only write pixels that pass the chroma key distance test
+                    if ((dr * dr + dg * dg + db * db) > thresholdSq) {
+                        outputPixels[idx] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
                     }
+                    // Keyed pixels and non-frame pixels stay 0x00000000
                 }
             }
         }
 
-        Log.i(TAG, "Chroma keying complete: $totalKeyed pixels keyed to transparent")
-
-        // Create ARGB_8888 bitmap from processed pixel buffer with alpha enabled
-        val keyedBitmap = Bitmap.createBitmap(allPixels, width, height, Bitmap.Config.ARGB_8888)
+        val keyedBitmap = Bitmap.createBitmap(outputPixels, width, height, Bitmap.Config.ARGB_8888)
         keyedBitmap.setHasAlpha(true)
         return keyedBitmap
     }
