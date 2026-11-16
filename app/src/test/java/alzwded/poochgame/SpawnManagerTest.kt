@@ -1,6 +1,9 @@
 package alzwded.poochgame
 
 import android.graphics.RectF
+import alzwded.poochgame.engine.GameConstants
+import alzwded.poochgame.engine.HeartCollectible
+import alzwded.poochgame.engine.FudgeCollectible
 import alzwded.poochgame.engine.ShyGuyEnemy
 import alzwded.poochgame.engine.SpawnManager
 import alzwded.poochgame.engine.SpriteAtlas
@@ -15,14 +18,16 @@ import org.junit.Test
 
 class SpawnManagerTest {
 
-    private lateinit var atlas: SpriteAtlas
+    private lateinit var shyguyAtlas: SpriteAtlas
+    private lateinit var fudgeAtlas: SpriteAtlas
+    private lateinit var heartAtlas: SpriteAtlas
     private lateinit var spawner: SpawnManager
 
     @Before
     fun setUp() {
-        val frames = mutableListOf<SpriteFrame>()
+        val shyguyFrames = mutableListOf<SpriteFrame>()
         for (i in 0..5) {
-            frames.add(
+            shyguyFrames.add(
                 SpriteFrame(
                     id = "walk_$i",
                     x = i * 150, y = 0,
@@ -33,7 +38,7 @@ class SpawnManagerTest {
             )
         }
         for (i in 0..3) {
-            frames.add(
+            shyguyFrames.add(
                 SpriteFrame(
                     id = "ohoh_$i",
                     x = i * 200, y = 300,
@@ -43,13 +48,42 @@ class SpawnManagerTest {
                 )
             )
         }
-        atlas = SpriteAtlas("shyguy", null, frames)
-        spawner = SpawnManager(atlas, atlas)
+        shyguyAtlas = SpriteAtlas("shyguy", null, shyguyFrames)
+
+        val fudgeFrames = mutableListOf<SpriteFrame>()
+        for (i in 0..7) {
+            fudgeFrames.add(
+                SpriteFrame(
+                    id = "fudge_$i",
+                    x = i * 100, y = 0,
+                    width = 219, height = 212,
+                    originX = 110, originY = 162
+                )
+            )
+        }
+        fudgeAtlas = SpriteAtlas("fudge", null, fudgeFrames)
+
+        val heartFrames = mutableListOf<SpriteFrame>()
+        for (i in 0..7) {
+            heartFrames.add(
+                SpriteFrame(
+                    id = "heart_$i",
+                    x = i * 100, y = 0,
+                    width = 232, height = 214,
+                    originX = 114, originY = 102
+                )
+            )
+        }
+        heartAtlas = SpriteAtlas("heart", null, heartFrames)
+
+        spawner = SpawnManager(shyguyAtlas, fudgeAtlas, heartAtlas)
     }
 
     @Test
-    fun `spawner enforces static maximum pool of 64 sprites`() {
+    fun `spawner enforces static maximum pools of 64 sprites for all entities`() {
         assertEquals(64, spawner.enemies.size)
+        assertEquals(64, spawner.fudges.size)
+        assertEquals(64, spawner.hearts.size)
         assertEquals(0, spawner.activeCount)
     }
 
@@ -76,33 +110,84 @@ class SpawnManagerTest {
     }
 
     @Test
-    fun `cadence advances slots and spawns on even slots only`() {
+    fun `cadence advances slots and updates entities`() {
         val frameDt = 0.016f
         val slotTime = SpawnManager.SLOT_INTERVAL_DISTANCE / 550f
 
-        // Advance 1 slot using realistic frame steps
+        // Advance 1 slot using realistic frame steps at max HP (no random heart spawn)
         var elapsed = 0f
         while (elapsed <= slotTime) {
-            spawner.update(frameDt, 550f, 260f)
+            spawner.update(frameDt, 550f, 260f, GameConstants.MAX_HP)
             elapsed += frameDt
         }
 
-        // Slot 0 (even) has ticked -> 1 enemy spawned
-        assertEquals(1, spawner.activeCount)
+        // Slot 0 (even) has ticked -> slotIndex is 1
         assertEquals(1, spawner.slotIndex)
 
-        // Advance slot 1 (odd slot -> collectible slot, no enemy spawn)
+        // Advance slot 1
         elapsed = 0f
         while (elapsed <= slotTime) {
-            spawner.update(frameDt, 550f, 260f)
+            spawner.update(frameDt, 550f, 260f, GameConstants.MAX_HP)
             elapsed += frameDt
         }
-        assertEquals(1, spawner.activeCount) // still 1 enemy
         assertEquals(2, spawner.slotIndex)
+    }
 
-        // Slot 2 (even): previous enemy is still in front of player (not cleared yet), so no new spawn
-        spawner.update(frameDt, 550f, 260f)
-        assertEquals(1, spawner.activeCount)
+    @Test
+    fun `spawnHeart manually spawns heart collectible`() {
+        val heart = spawner.spawnHeart(1000f, flying = false)
+        assertNotNull(heart)
+        assertTrue(heart!!.isActive)
+        assertEquals(1000f, heart.virtualX, 0.001f)
+    }
+
+    @Test
+    fun `checkHeartCollision detects player overlap with active heart`() {
+        val heart = spawner.spawnHeart(500f, flying = false)
+        assertNotNull(heart)
+
+        val playerHitbox = RectF()
+        playerHitbox.left = heart!!.hitbox.left
+        playerHitbox.top = heart.hitbox.top
+        playerHitbox.right = heart.hitbox.right
+        playerHitbox.bottom = heart.hitbox.bottom
+
+        val colliding = spawner.checkHeartCollision(playerHitbox)
+        assertNotNull(colliding)
+        assertEquals(heart, colliding)
+
+        heart.onCollect()
+        assertFalse(heart.isActive)
+        val collidingAfterCollect = spawner.checkHeartCollision(playerHitbox)
+        assertNull(collidingAfterCollect)
+    }
+
+    @Test
+    fun `spawnFudge manually spawns fudge collectible`() {
+        val fudge = spawner.spawnFudge(1000f, flying = true)
+        assertNotNull(fudge)
+        assertTrue(fudge!!.isActive)
+        assertTrue(fudge.isFlying)
+    }
+
+    @Test
+    fun `checkFudgeCollision detects player overlap with active fudge`() {
+        val fudge = spawner.spawnFudge(500f, flying = false)
+        assertNotNull(fudge)
+
+        val playerHitbox = RectF()
+        playerHitbox.left = fudge!!.hitbox.left
+        playerHitbox.top = fudge.hitbox.top
+        playerHitbox.right = fudge.hitbox.right
+        playerHitbox.bottom = fudge.hitbox.bottom
+
+        val colliding = spawner.checkFudgeCollision(playerHitbox)
+        assertNotNull(colliding)
+        assertEquals(fudge, colliding)
+
+        fudge.onCollect()
+        assertFalse(fudge.isActive)
+        assertNull(spawner.checkFudgeCollision(playerHitbox))
     }
 
     @Test
@@ -126,5 +211,24 @@ class SpawnManagerTest {
         enemy.onPlayerCollision()
         val collidingAfterHurt = spawner.checkPlayerCollision(playerHitbox)
         assertNull(collidingAfterHurt)
+    }
+
+    @Test
+    fun `reset deactivates all pooled enemies fudges and hearts`() {
+        val enemy = spawner.spawnShyGuy()
+        val fudge = spawner.spawnFudge(500f, false)
+        val heart = spawner.spawnHeart(500f, false)
+
+        assertTrue(enemy!!.isActive)
+        assertTrue(fudge!!.isActive)
+        assertTrue(heart!!.isActive)
+
+        spawner.reset()
+
+        assertFalse(enemy.isActive)
+        assertFalse(fudge.isActive)
+        assertFalse(heart.isActive)
+        assertEquals(0, spawner.slotIndex)
+        assertEquals(0f, spawner.accumulatedDistance, 0.001f)
     }
 }

@@ -74,6 +74,10 @@ class GameEngine(private val context: Context) {
         private set
     private var fudgeCount: Int = 0
     private var score: Int = 0
+    private var heartAtlas: SpriteAtlas? = null
+    private var fudgeAtlas: SpriteAtlas? = null
+    private val topHeartFrameIndices = IntArray(GameConstants.MAX_HP) { Random.nextInt(8) }
+    private var heartAnimTimer: Float = 0f
 
     /**
      * Initialize the engine when the rendering surface becomes available.
@@ -126,7 +130,7 @@ class GameEngine(private val context: Context) {
             Log.e(TAG, "Failed to load pooch atlas", e)
         }
 
-        // 3. Load Shy Guy & Fudge sprite atlases and initialize SpawnManager
+        // 3. Load Shy Guy, Fudge & Heart sprite atlases and initialize SpawnManager
         try {
             val shyguyAtlas = SpriteAtlasManager.loadAtlas(
                 context,
@@ -140,8 +144,16 @@ class GameEngine(private val context: Context) {
                 "sprites/fudge.jpg",
                 "sprites/fudge.json"
             )
-            spawnManager = SpawnManager(shyguyAtlas, fudgeAtlas)
-            Log.i(TAG, "SpawnManager initialized with atlases '${shyguyAtlas.key}' & '${fudgeAtlas.key}'")
+            val heartAtlas = SpriteAtlasManager.loadAtlas(
+                context,
+                EntityRegistry.HEART.atlasKey,
+                "sprites/hearts.jpg",
+                "sprites/hearts.json"
+            )
+            this.fudgeAtlas = fudgeAtlas
+            this.heartAtlas = heartAtlas
+            spawnManager = SpawnManager(shyguyAtlas, fudgeAtlas, heartAtlas)
+            Log.i(TAG, "SpawnManager initialized with atlases '${shyguyAtlas.key}', '${fudgeAtlas.key}', & '${heartAtlas.key}'")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load spawner atlases", e)
         }
@@ -186,7 +198,14 @@ class GameEngine(private val context: Context) {
      */
     fun update(deltaTime: Float) {
         val dt = deltaTime.coerceAtMost(GameConstants.MAX_DELTA_TIME)
-
+        // Update top-row heart frame randomization timer every 0.5s
+        heartAnimTimer += dt
+        if (heartAnimTimer >= 0.5f) {
+            heartAnimTimer -= 0.5f
+            for (i in topHeartFrameIndices.indices) {
+                topHeartFrameIndices[i] = Random.nextInt(8)
+            }
+        }
         when (state) {
             GameState.TOUCH_TO_START -> {
                 pooch?.update(dt * 0.75f, false)
@@ -238,16 +257,25 @@ class GameEngine(private val context: Context) {
         // 3. Update spawner & enemies
         val sm = spawnManager
         val playerX = p?.virtualX ?: 0f
-        sm?.update(dt, scrollSpeed, playerX)
+        sm?.update(dt, scrollSpeed, playerX, playerHP)
 
-        // 4. Collectible collision check (Fudge)
+        // 4. Collectible collision checks (Heart & Fudge)
         if (p != null && sm != null && p.animState != PoochPlayer.AnimState.GAME_OVER) {
+            val collectedHeart = sm.checkHeartCollision(p.hitbox)
+            if (collectedHeart != null) {
+                collectedHeart.onCollect()
+                if (playerHP < GameConstants.MAX_HP) {
+                    playerHP++
+                }
+                SoundManager.playArfArf()
+                Log.d(TAG, "Heart collected! Restored HP to $playerHP")
+            }
+
             val collectedFudge = sm.checkFudgeCollision(p.hitbox)
             if (collectedFudge != null) {
                 collectedFudge.onCollect()
                 fudgeCount++
-                // Randomly play crunch or arfarf on fudge pickup
-                if (Random.nextBoolean()) {
+                if (Random.nextInt(0, 10) < 8) {
                     SoundManager.playCrunch()
                 } else {
                     SoundManager.playArfArf()
@@ -298,7 +326,7 @@ class GameEngine(private val context: Context) {
         p.update(dt, false)
 
         // Allow any active hurt enemies to finish their trajectory
-        spawnManager?.update(dt, 0f, p.virtualX)
+        spawnManager?.update(dt, 0f, p.virtualX, playerHP)
 
         // When death fall completes off bottom of screen, return to initial splash screen
         if (p.isGameOverAnimFinished) {
@@ -410,27 +438,70 @@ class GameEngine(private val context: Context) {
     }
 
     /**
-     * Render the heads-up display: HP hearts, fudge counter, score.
+     * Render the heads-up display: top hearts row and fudge counter bar.
      */
     private fun renderHUD(canvas: Canvas) {
-        textPaint.textSize = 40f * scaleX
+        val hAtlas = heartAtlas ?: return
+        val fAtlas = fudgeAtlas ?: return
+        val hFrames = hAtlas.frames
+        if (hFrames.isEmpty()) return
 
-        // Score
-        canvas.drawText("Score: $score", 20f * scaleX, 50f * scaleY, textPaint)
+        // 1. Top row of hearts evenly distributed across screen width
+        val maxHp = GameConstants.MAX_HP
+        val heartSlotWidth = GameConstants.VIRTUAL_WIDTH / maxHp.toFloat()
+        val heartY = 70f
 
-        // Hearts
-        val fullHearts = playerHP.coerceIn(0, GameConstants.MAX_HP)
-        val emptyHearts = (GameConstants.MAX_HP - fullHearts).coerceAtLeast(0)
-        val heartsText = "❤".repeat(fullHearts) + "♡".repeat(emptyHearts)
-        canvas.drawText(heartsText, 20f * scaleX, 110f * scaleY, textPaint)
+        for (i in 0 until playerHP.coerceIn(0, maxHp)) {
+            val frameIndex = topHeartFrameIndices[i] % hFrames.size
+            val frame = hFrames[frameIndex]
+            val vx = (i + 0.5f) * heartSlotWidth
+            val targetW = heartSlotWidth * 0.4f
+            val heartScale = targetW / frame.width.toFloat()
 
-        // Fudge counter
-        canvas.drawText(
-            "Fudge: $fudgeCount/${GameConstants.FUDGES_FOR_SUPER}",
-            20f * scaleX,
-            170f * scaleY,
-            textPaint
-        )
+            SpriteRenderer.drawFrame(
+                canvas = canvas,
+                bitmap = hAtlas.bitmap ?: continue,
+                frame = frame,
+                virtualX = vx,
+                virtualY = heartY,
+                scale = heartScale,
+                scaleX = scaleX,
+                scaleY = scaleY,
+                mirrored = false,
+                paint = textPaint,
+                srcRect = srcRect,
+                dstRect = dstRect
+            )
+        }
+
+        // 2. Row of up to 10 fudge sprites scaled across the whole length of the screen
+        val maxFudges = GameConstants.FUDGES_FOR_SUPER
+        val fudgeSlotWidth = GameConstants.VIRTUAL_WIDTH / maxFudges.toFloat()
+        val fudgeY = 230f
+        val clampedFudgeCount = fudgeCount.coerceIn(0, maxFudges)
+
+        for (i in 0 until clampedFudgeCount) {
+            val frameName = "fudge_$i"
+            val frame = fAtlas.getFrame(frameName) ?: fAtlas.frames[i % fAtlas.frames.size]
+            val vx = (i + 0.5f) * fudgeSlotWidth
+            val targetW = fudgeSlotWidth * 0.85f
+            val fudgeScale = targetW / frame.width.toFloat()
+
+            SpriteRenderer.drawFrame(
+                canvas = canvas,
+                bitmap = fAtlas.bitmap ?: continue,
+                frame = frame,
+                virtualX = vx,
+                virtualY = fudgeY,
+                scale = fudgeScale,
+                scaleX = scaleX,
+                scaleY = scaleY,
+                mirrored = false,
+                paint = textPaint,
+                srcRect = srcRect,
+                dstRect = dstRect
+            )
+        }
     }
 
     /**

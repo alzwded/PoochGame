@@ -19,7 +19,8 @@ import kotlin.random.Random
  */
 class SpawnManager(
     private val shyguyAtlas: SpriteAtlas,
-    private val fudgeAtlas: SpriteAtlas
+    private val fudgeAtlas: SpriteAtlas,
+    private val heartAtlas: SpriteAtlas
 ) {
     companion object {
         private const val TAG = "SpawnManager"
@@ -35,6 +36,7 @@ class SpawnManager(
     // Pre-allocated static pools (zero per-frame heap allocations)
     val enemies: Array<ShyGuyEnemy> = Array(MAX_SPRITES) { ShyGuyEnemy(shyguyAtlas) }
     val fudges: Array<FudgeCollectible> = Array(MAX_SPRITES) { FudgeCollectible(fudgeAtlas) }
+    val hearts: Array<HeartCollectible> = Array(MAX_SPRITES) { HeartCollectible(heartAtlas) }
 
     /** Sequential counter for slot ticks. */
     var slotIndex: Int = 0
@@ -77,6 +79,7 @@ class SpawnManager(
         for (i in 0 until MAX_SPRITES) {
             enemies[i].reset()
             fudges[i].reset()
+            hearts[i].reset()
         }
         lastSpawnedEnemy = null
         slotIndex = 0
@@ -89,16 +92,16 @@ class SpawnManager(
      * @param dt Elapsed frame time in seconds.
      * @param scrollSpeed Current horizontal scroll speed (px/s).
      * @param playerVirtualX Player's horizontal anchor position.
+     * @param playerHP Current player health.
      */
-    fun update(dt: Float, scrollSpeed: Float, playerVirtualX: Float) {
+    fun update(dt: Float, scrollSpeed: Float, playerVirtualX: Float, playerHP: Int) {
         // Advance spawn slot distance
         accumulatedDistance += scrollSpeed * dt
         while (accumulatedDistance >= SLOT_INTERVAL_DISTANCE) {
             accumulatedDistance -= SLOT_INTERVAL_DISTANCE
-            onSlotTick()
+            onSlotTick(playerHP)
         }
-
-        // Update all active enemies
+        // Update all active entities
         for (i in 0 until MAX_SPRITES) {
             if (enemies[i].isActive) {
                 enemies[i].update(dt, scrollSpeed, playerVirtualX)
@@ -106,15 +109,26 @@ class SpawnManager(
             if (fudges[i].isActive) {
                 fudges[i].update(dt, scrollSpeed, playerVirtualX)
             }
+            if (hearts[i].isActive) {
+                hearts[i].update(dt, scrollSpeed, playerVirtualX)
+            }
         }
     }
 
     /**
      * Executes logic for the current quantized spawn slot.
      */
-    private fun onSlotTick() {
+    private fun onSlotTick(playerHP: Int) {
         val currentSlot = slotIndex++
         val isEvenSlot = (currentSlot % 2 == 0)
+
+        // 5% chance to spawn rare heart when HP < 3 (spawns alone)
+        if (playerHP < GameConstants.MAX_HP && Random.nextFloat() < 0.05f) {
+            val isFlying = Random.nextBoolean()
+            spawnHeart(SPAWN_X, isFlying)
+            return
+        }
+
         if (isEvenSlot) {
             // Even slot: can spawn Enemy, Fudge, or Both
             if (canSpawnEnemy) {
@@ -159,6 +173,28 @@ class SpawnManager(
             if (!fudge.isActive) {
                 fudge.spawn(spawnX, flying, speedOffset)
                 return fudge
+            }
+        }
+        return null
+    }
+
+    fun spawnHeart(spawnX: Float, flying: Boolean, speedOffset: Float = 0f): HeartCollectible? {
+        for (i in 0 until MAX_SPRITES) {
+            val heart = hearts[i]
+            if (!heart.isActive) {
+                heart.spawn(spawnX, flying, speedOffset)
+                Log.d(TAG, "Spawned Heart collectible on slot $slotIndex at index $i")
+                return heart
+            }
+        }
+        return null
+    }
+
+    fun checkHeartCollision(playerHitbox: RectF): HeartCollectible? {
+        for (i in 0 until MAX_SPRITES) {
+            val heart = hearts[i]
+            if (heart.isActive && intersects(playerHitbox, heart.hitbox)) {
+                return heart
             }
         }
         return null
@@ -227,6 +263,11 @@ class SpawnManager(
         for (i in 0 until MAX_SPRITES) {
             if (fudges[i].isActive) {
                 fudges[i].render(canvas, scaleX, scaleY)
+            }
+        }
+        for (i in 0 until MAX_SPRITES) {
+            if (hearts[i].isActive) {
+                hearts[i].render(canvas, scaleX, scaleY)
             }
         }
         for (i in 0 until MAX_SPRITES) {

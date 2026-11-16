@@ -24,7 +24,7 @@
 - [x] bg loader and scrolling
 - [x] sprite map loader
 - [x] hit boxes
-- [ ] fudge counter
+- [x] fudge counter
 - [ ] HP hearts counter
 - [x] hurt animation
 - [x] game over animation

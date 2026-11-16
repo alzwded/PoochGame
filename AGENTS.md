@@ -260,11 +260,11 @@ object EntityRegistry {
 - [x] Pooch Run Animation Controller (indexed frame lookup)
 - [x] Jump Physics & Jump Animation Trigger
 - [ ] AABB Hitboxes & Visual Debug Draw Toggles
-- [ ] Obstacle & Collectible Spawner (Shy Guys, Fudges, & 1-in-100 Rare Hearts)
+- [x] Obstacle & Collectible Spawner (Shy Guys, Fudges, & 1-in-100 Rare Hearts)
 
 ### Phase 4: UI, Counters & Power-ups
-- [ ] Fudge Counter UI Display
-- [ ] HP Hearts Counter UI Display (3 Hearts max) & Rare Heart pickup restoration logic
+- [x] Fudge Counter UI Display
+- [x] HP Hearts Counter UI Display (3 Hearts max) & Rare Heart pickup restoration logic
 - [x] Hurt Animation & Invincibility Frames
 - [x] Shy Guy Hurt / Stun Animation
 - [ ] Super Mode State Machine:
@@ -276,5 +276,5 @@ object EntityRegistry {
 
 ### Phase 5: Game Over & Polish
 - [x] Game Over Mario-style Death Animation (Upward pop + downward gravity fall out of portrait screen)
-- [ ] Sound Manager Integration (BGM switching, low-latency SFX)
+- [x] Sound Manager Integration (BGM switching, low-latency SFX)
 - [ ] Frame Budget & Zero-Allocation Memory Audit ($60\text{ FPS}$ / $30\text{ FPS}$)
