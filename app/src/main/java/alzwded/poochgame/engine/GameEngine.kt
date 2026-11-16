@@ -9,6 +9,7 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
 import android.util.Log
+import kotlin.random.Random
 
 /**
  * Core game engine. Manages game state, entities, physics, and rendering.
@@ -89,7 +90,7 @@ class GameEngine(private val context: Context) {
 
         loadAssets()
         resetPlayer()
-        SoundManager.playMainBgm()
+        SoundManager.playBgm()
     }
 
     /**
@@ -166,7 +167,7 @@ class GameEngine(private val context: Context) {
             GameState.TOUCH_TO_START -> {
                 state = GameState.PLAYING
                 resetPlayer()
-                SoundManager.playMainBgm()
+                SoundManager.playBgm()
                 Log.d(TAG, "Tap → PLAYING")
             }
             GameState.PLAYING, GameState.SUPER_MODE, GameState.HURT -> {
@@ -245,7 +246,12 @@ class GameEngine(private val context: Context) {
             if (collectedFudge != null) {
                 collectedFudge.onCollect()
                 fudgeCount++
-                SoundManager.playCrunch()
+                // Randomly play crunch or arfarf on fudge pickup
+                if (Random.nextBoolean()) {
+                    SoundManager.playCrunch()
+                } else {
+                    SoundManager.playArfArf()
+                }
                 Log.d(TAG, "Fudge collected! Count: $fudgeCount")
                 if (fudgeCount >= GameConstants.FUDGES_FOR_SUPER) {
                     fudgeCount = 0
@@ -259,6 +265,12 @@ class GameEngine(private val context: Context) {
             val collidedEnemy = sm.checkPlayerCollision(p.hitbox)
             if (collidedEnemy != null) {
                 collidedEnemy.onPlayerCollision()
+                // Randomly play smash or sadpup on enemy collision, unless in super mode
+                if (isSuper || Random.nextBoolean()) {
+                    SoundManager.playSmash()
+                } else {
+                    SoundManager.playSadPup()
+                }
                 playerHP--
                 if (playerHP <= 0) {
                     playerHP = 0
@@ -292,7 +304,7 @@ class GameEngine(private val context: Context) {
         if (p.isGameOverAnimFinished) {
             state = GameState.TOUCH_TO_START
             resetPlayer()
-            SoundManager.playMainBgm()
+            SoundManager.playBgm()
             Log.d(TAG, "Game Over death animation finished -> returned to TOUCH_TO_START")
         }
     }

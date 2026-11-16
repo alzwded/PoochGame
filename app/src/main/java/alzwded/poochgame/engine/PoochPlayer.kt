@@ -296,6 +296,7 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
                     animState = AnimState.JUMP_LANDING
                     landingTimer = JUMP_LANDING_DURATION
                     currentFrame = jumpFrames[5]
+                    SoundManager.playThump()
                 }
             }
 
@@ -326,6 +327,8 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
                         virtualY = groundHeadY
                         velocityY = 0f
                         isOnGround = true
+                        // Play landing thump sound if hitting ground while hurt
+                        SoundManager.playThump()
                     }
                 }
 

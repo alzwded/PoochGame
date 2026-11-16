@@ -29,7 +29,7 @@ class ShyGuyEnemy(private val atlas: SpriteAtlas) {
         const val WALK_FRAME_DURATION = 0.12f
         const val HURT_FRAME_DURATION = 0.08f
         const val GROUND_OFFSET = 19f // Frame height (166) minus originY (147)
-        const val HITBOX_INSET = 0.5f // 80% inset for fair play collisions
+        const val HITBOX_INSET = 0.7f // 80% inset for fair play collisions
         const val WALK_SPEED = 100f    // Walking speed relative to scrolling ground
         const val FLING_DURATION = 0.85f
     }

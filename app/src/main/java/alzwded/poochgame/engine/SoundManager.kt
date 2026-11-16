@@ -1,11 +1,10 @@
 package alzwded.poochgame.engine
 
 import android.content.Context
-import android.content.res.AssetFileDescriptor
 import android.media.AudioAttributes
 import android.media.MediaPlayer
-import android.util.Log
 import android.media.SoundPool
+import android.util.Log
 
 /**
  * Manages game audio playback:
@@ -16,10 +15,18 @@ import android.media.SoundPool
 object SoundManager {
     private const val TAG = "SoundManager"
     const val BGM_MAIN = "audio/bg_main.m4a"
+
     private var appContext: Context? = null
     private var bgmPlayer: MediaPlayer? = null
     private var soundPool: SoundPool? = null
+
+    // SFX Sound Pool IDs
     private var crunchSoundId: Int = 0
+    private var thumpSoundId: Int = 0
+    private var smashSoundId: Int = 0
+    private var sadPupSoundId: Int = 0
+    private var arfArfSoundId: Int = 0
+
     private var currentTrack: String? = null
     private var isBgmPlaying: Boolean = false
     private var wasPlayingBeforePause: Boolean = false
@@ -42,39 +49,47 @@ object SoundManager {
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .setUsage(AudioAttributes.USAGE_GAME)
                 .build()
+
             val pool = SoundPool.Builder()
                 .setMaxStreams(8)
                 .setAudioAttributes(attrs)
                 .build()
 
-            var afd: AssetFileDescriptor? = null
-            try {
-                afd = context.assets.openFd("audio/sfx_crunch.wav")
-                crunchSoundId = pool.load(afd, 1)
-            } finally {
-                afd?.close()
-            }
+            crunchSoundId = loadSound(pool, context, "audio/sfx_crunch.wav")
+            thumpSoundId = loadSound(pool, context, "audio/sfx_thump.wav")
+            smashSoundId = loadSound(pool, context, "audio/sfx_smash.wav")
+            sadPupSoundId = loadSound(pool, context, "audio/sfx_sadpup.wav")
+            arfArfSoundId = loadSound(pool, context, "audio/sfx_arfarf.wav")
+
             soundPool = pool
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize SoundPool SFX", e)
         }
     }
 
-    fun playCrunch() {
-        val pool = soundPool ?: return
-        if (crunchSoundId != 0) {
-            pool.play(crunchSoundId, 1.0f, 1.0f, 1, 0, 1.0f)
+    private fun loadSound(pool: SoundPool, context: Context, path: String): Int {
+        return try {
+            context.assets.openFd(path).use { afd ->
+                pool.load(afd, 1)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load SFX asset: $path", e)
+            0
         }
     }
 
-    /**
-     * Start playing the main background music in a loop.
-     * If the main BGM is already actively playing, this is a no-op to prevent audio interruption.
-     */
-    @Synchronized
-    fun playMainBgm() {
-        playBgm(BGM_MAIN)
+    private fun playSound(soundId: Int, priority: Int = 1) {
+        val pool = soundPool ?: return
+        if (soundId != 0) {
+            pool.play(soundId, 1.0f, 1.0f, priority, 0, 1.0f)
+        }
     }
+
+    fun playCrunch() = playSound(crunchSoundId)
+    fun playThump() = playSound(thumpSoundId)
+    fun playSmash() = playSound(smashSoundId)
+    fun playSadPup() = playSound(sadPupSoundId)
+    fun playArfArf() = playSound(arfArfSoundId)
 
     /**
      * Play a specified BGM asset file with seamless looping.
@@ -82,7 +97,7 @@ object SoundManager {
      * @param assetPath Path relative to assets/ (e.g. [BGM_MAIN]).
      */
     @Synchronized
-    fun playBgm(assetPath: String) {
+    fun playBgm(assetPath: String = BGM_MAIN) {
         val context = appContext ?: run {
             Log.w(TAG, "Cannot play BGM: SoundManager not initialized with context")
             return
@@ -93,42 +108,19 @@ object SoundManager {
             return
         }
 
+        stopBgm()
+
         try {
-            stopBgmInternal()
-
-            val player = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .setUsage(AudioAttributes.USAGE_GAME)
-                        .build()
-                )
+            val afd = context.assets.openFd(assetPath)
+            bgmPlayer = MediaPlayer().apply {
+                setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                afd.close()
                 isLooping = true
-                setVolume(1.0f, 1.0f)
-
-                setOnErrorListener { mp, what, extra ->
-                    Log.e(TAG, "MediaPlayer error: what=$what, extra=$extra")
-                    mp.reset()
-                    isBgmPlaying = false
-                    true
-                }
+                prepare()
+                start()
             }
-
-            var afd: AssetFileDescriptor? = null
-            try {
-                afd = context.assets.openFd(assetPath)
-                player.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-            } finally {
-                afd?.close()
-            }
-
-            player.prepare()
-            player.start()
-
-            bgmPlayer = player
             currentTrack = assetPath
             isBgmPlaying = true
-            wasPlayingBeforePause = true
             Log.i(TAG, "BGM playing in loop: $assetPath")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start BGM: $assetPath", e)
@@ -173,7 +165,7 @@ object SoundManager {
                     }
                 } ?: run {
                     // Re-create player if it was released or null
-                    currentTrack?.let { playBgm(it) } ?: playMainBgm()
+                    currentTrack?.let { playBgm(it) } ?: playBgm()
                 }
             }
         } catch (e: Exception) {
@@ -216,6 +208,10 @@ object SoundManager {
         soundPool?.release()
         soundPool = null
         crunchSoundId = 0
+        thumpSoundId = 0
+        smashSoundId = 0
+        sadPupSoundId = 0
+        arfArfSoundId = 0
         appContext = null
         Log.i(TAG, "SoundManager released")
     }
