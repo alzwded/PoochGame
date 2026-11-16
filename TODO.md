@@ -5,12 +5,12 @@
   + [x] hearts
   + [ ] tap to start text (can be font rendering)
 - [ ] audio
-  + [ ] arf arf
-  + [ ] sad puppy sound
-  + [ ] steps
-  + [ ] smash
-  + [ ] chew animation
-  + [ ] grow big
+  + [x] arf arf
+  + [x] sad puppy sound
+  + [x] steps
+  + [x] smash
+  + [x] chew animation
+  + [ ] ~~grow big~~ (use arf arf?)
   + [x] main bg
   + [x] super high octane bg
 - [x] background

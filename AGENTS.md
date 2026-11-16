@@ -238,13 +238,13 @@ object EntityRegistry {
 - [x] Sprite Editor (With 3D RGB Distance Chroma Key export support)
 - [x] Multi-Atlas JSON Parser with `baseScale` and Chroma Key (`chromaKey`, `chromaThreshold`) processing
 - [ ] Sound & Audio Assets
-  - [ ] Bark / Arf sound (`pooch_bark.wav`)
-  - [ ] Sad puppy whimper (`pooch_hurt.wav`)
-  - [ ] Footsteps loop (`pooch_steps.wav`)
-  - [ ] Smash sound (`smash_tower.wav`)
-  - [ ] Chew animation sound (`fudge_eat.wav`)
-  - [ ] Grow big powerup sound (`grow_big.wav`)
-  - [ ] Heart pickup sound (`heart_pickup.wav`)
+  - [x] Bark / Arf sound (`sfx_arfarf.wav`)
+  - [x] Sad puppy whimper (`sfx_sadpup.wav`)
+  - [x] Landing sound (`sfx_thump.wav`)
+  - [x] Smash sound (`sfx_smash.wav`)
+  - [x] Chew animation sound (`sfx_crunch.wav`)
+  - [ ] Grow big powerup sound (`sfx_arfarf.wav`)
+  - [ ] Heart pickup sound (`sfx_arfarf.wav`)
   - [x] Main background music track (`bg_main.m4a`)
   - [x] Super mode high-octane BGM track (`bg_super.m4a`)
 
