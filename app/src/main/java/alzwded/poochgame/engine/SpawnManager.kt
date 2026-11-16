@@ -3,6 +3,8 @@ package alzwded.poochgame.engine
 import android.graphics.Canvas
 import android.graphics.RectF
 import android.util.Log
+import kotlin.random.Random
+
 
 /**
  * Consolidated spawner and entity manager for enemies and obstacles.
@@ -15,23 +17,24 @@ import android.util.Log
  *   - Odd slots reserved for future collectibles (fudge, heart) at double frequency.
  * - Strictly zero-allocation per frame update and render loops.
  */
-class SpawnManager(private val shyguyAtlas: SpriteAtlas) {
-
+class SpawnManager(
+    private val shyguyAtlas: SpriteAtlas,
+    private val fudgeAtlas: SpriteAtlas
+) {
     companion object {
         private const val TAG = "SpawnManager"
-
         /** Hard maximum cap on active sprites to guarantee static memory allocation. */
         const val MAX_SPRITES = 64
-
         /** Virtual distance interval between spawn slots (in virtual pixels). */
         const val SLOT_INTERVAL_DISTANCE = 650f
-
         /** Off-screen spawn X position. */
         val SPAWN_X: Float get() = GameConstants.VIRTUAL_WIDTH + 120f
     }
 
-    // Pre-allocated static pool of 64 Shy Guy enemies (zero per-frame heap allocations)
+    // TODO uhm... these need to be optimized to have a total of MAX_SPRITES
+    // Pre-allocated static pools (zero per-frame heap allocations)
     val enemies: Array<ShyGuyEnemy> = Array(MAX_SPRITES) { ShyGuyEnemy(shyguyAtlas) }
+    val fudges: Array<FudgeCollectible> = Array(MAX_SPRITES) { FudgeCollectible(fudgeAtlas) }
 
     /** Sequential counter for slot ticks. */
     var slotIndex: Int = 0
@@ -73,6 +76,7 @@ class SpawnManager(private val shyguyAtlas: SpriteAtlas) {
     fun reset() {
         for (i in 0 until MAX_SPRITES) {
             enemies[i].reset()
+            fudges[i].reset()
         }
         lastSpawnedEnemy = null
         slotIndex = 0
@@ -99,6 +103,9 @@ class SpawnManager(private val shyguyAtlas: SpriteAtlas) {
             if (enemies[i].isActive) {
                 enemies[i].update(dt, scrollSpeed, playerVirtualX)
             }
+            if (fudges[i].isActive) {
+                fudges[i].update(dt, scrollSpeed, playerVirtualX)
+            }
         }
     }
 
@@ -108,16 +115,53 @@ class SpawnManager(private val shyguyAtlas: SpriteAtlas) {
     private fun onSlotTick() {
         val currentSlot = slotIndex++
         val isEvenSlot = (currentSlot % 2 == 0)
-
         if (isEvenSlot) {
-            // Even slots: eligible for enemy spawn if prior enemy is cleared
+            // Even slot: can spawn Enemy, Fudge, or Both
             if (canSpawnEnemy) {
-                spawnShyGuy()
+                val roll = Random.nextFloat()
+                when {
+                    roll < 0.35f -> {
+                        // Enemy only
+                        spawnShyGuy()
+                    }
+                    roll < 0.65f -> {
+                        // Fudge only
+                        val isFlying = Random.nextBoolean()
+                        spawnFudge(SPAWN_X, isFlying, if (isFlying) FudgeCollectible.FLYING_SPEED else 0f)
+                    }
+                    else -> {
+                        // BOTH Enemy and Fudge!
+                        spawnShyGuy()
+                        if (Random.nextBoolean()) {
+                            // Flying form at max jump height, matching enemy speed
+                            spawnFudge(SPAWN_X, flying = true, speedOffset = ShyGuyEnemy.WALK_SPEED)
+                        } else {
+                            // Ground form offset in front (+160f) or behind (-160f), matching enemy speed
+                            val offset = if (Random.nextBoolean()) 160f else -160f
+                            spawnFudge(SPAWN_X + offset, flying = false, speedOffset = ShyGuyEnemy.WALK_SPEED)
+                        }
+                    }
+                }
+            } else {
+                val isFlying = Random.nextBoolean()
+                spawnFudge(SPAWN_X, isFlying, if (isFlying) FudgeCollectible.FLYING_SPEED else 0f)
             }
         } else {
-            // Odd slots: reserved for future collectibles (fudge, heart)
-            // Long term: spawnFudge() or spawnHeart() will be called here
+            // Odd slot: Collectible slot (2x rate vs enemies)
+            val isFlying = Random.nextBoolean()
+            spawnFudge(SPAWN_X, isFlying, if (isFlying) FudgeCollectible.FLYING_SPEED else 0f)
         }
+    }
+
+    fun spawnFudge(spawnX: Float, flying: Boolean, speedOffset: Float = 0f): FudgeCollectible? {
+        for (i in 0 until MAX_SPRITES) {
+            val fudge = fudges[i]
+            if (!fudge.isActive) {
+                fudge.spawn(spawnX, flying, speedOffset)
+                return fudge
+            }
+        }
+        return null
     }
 
     /**
@@ -161,15 +205,30 @@ class SpawnManager(private val shyguyAtlas: SpriteAtlas) {
         return null
     }
 
+    fun checkFudgeCollision(playerHitbox: RectF): FudgeCollectible? {
+        for (i in 0 until MAX_SPRITES) {
+            val fudge = fudges[i]
+            if (fudge.isActive && intersects(playerHitbox, fudge.hitbox)) {
+                return fudge
+            }
+        }
+        return null
+    }
+
     private fun intersects(a: RectF, b: RectF): Boolean {
         return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
     }
 
     /**
-     * Renders all active enemies to the canvas.
+     * Renders all active fudges and enemies to the canvas.
      * ZERO allocations.
      */
     fun render(canvas: Canvas, scaleX: Float, scaleY: Float) {
+        for (i in 0 until MAX_SPRITES) {
+            if (fudges[i].isActive) {
+                fudges[i].render(canvas, scaleX, scaleY)
+            }
+        }
         for (i in 0 until MAX_SPRITES) {
             if (enemies[i].isActive) {
                 enemies[i].render(canvas, scaleX, scaleY)

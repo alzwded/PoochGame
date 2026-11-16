@@ -5,6 +5,7 @@ import android.content.res.AssetFileDescriptor
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.util.Log
+import android.media.SoundPool
 
 /**
  * Manages game audio playback:
@@ -13,13 +14,12 @@ import android.util.Log
  * - Robust error handling and lifecycle hygiene.
  */
 object SoundManager {
-
     private const val TAG = "SoundManager"
-
     const val BGM_MAIN = "audio/bg_main.m4a"
-
     private var appContext: Context? = null
     private var bgmPlayer: MediaPlayer? = null
+    private var soundPool: SoundPool? = null
+    private var crunchSoundId: Int = 0
     private var currentTrack: String? = null
     private var isBgmPlaying: Boolean = false
     private var wasPlayingBeforePause: Boolean = false
@@ -31,7 +31,39 @@ object SoundManager {
     fun init(context: Context) {
         if (appContext == null) {
             appContext = context.applicationContext
+            initSoundPool(context.applicationContext)
             Log.i(TAG, "SoundManager initialized")
+        }
+    }
+
+    private fun initSoundPool(context: Context) {
+        try {
+            val attrs = AudioAttributes.Builder()
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_GAME)
+                .build()
+            val pool = SoundPool.Builder()
+                .setMaxStreams(8)
+                .setAudioAttributes(attrs)
+                .build()
+
+            var afd: AssetFileDescriptor? = null
+            try {
+                afd = context.assets.openFd("audio/sfx_crunch.wav")
+                crunchSoundId = pool.load(afd, 1)
+            } finally {
+                afd?.close()
+            }
+            soundPool = pool
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize SoundPool SFX", e)
+        }
+    }
+
+    fun playCrunch() {
+        val pool = soundPool ?: return
+        if (crunchSoundId != 0) {
+            pool.play(crunchSoundId, 1.0f, 1.0f, 1, 0, 1.0f)
         }
     }
 
@@ -181,6 +213,9 @@ object SoundManager {
     @Synchronized
     fun release() {
         stopBgm()
+        soundPool?.release()
+        soundPool = null
+        crunchSoundId = 0
         appContext = null
         Log.i(TAG, "SoundManager released")
     }

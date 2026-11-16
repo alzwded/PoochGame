@@ -125,7 +125,7 @@ class GameEngine(private val context: Context) {
             Log.e(TAG, "Failed to load pooch atlas", e)
         }
 
-        // 3. Load Shy Guy sprite atlas and initialize SpawnManager
+        // 3. Load Shy Guy & Fudge sprite atlases and initialize SpawnManager
         try {
             val shyguyAtlas = SpriteAtlasManager.loadAtlas(
                 context,
@@ -133,10 +133,16 @@ class GameEngine(private val context: Context) {
                 "sprites/shagay.jpg",
                 "sprites/shagay.json"
             )
-            spawnManager = SpawnManager(shyguyAtlas)
-            Log.i(TAG, "SpawnManager initialized with atlas '${shyguyAtlas.key}'")
+            val fudgeAtlas = SpriteAtlasManager.loadAtlas(
+                context,
+                EntityRegistry.FUDGE.atlasKey,
+                "sprites/fudge.jpg",
+                "sprites/fudge.json"
+            )
+            spawnManager = SpawnManager(shyguyAtlas, fudgeAtlas)
+            Log.i(TAG, "SpawnManager initialized with atlases '${shyguyAtlas.key}' & '${fudgeAtlas.key}'")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to load shyguy atlas", e)
+            Log.e(TAG, "Failed to load spawner atlases", e)
         }
     }
 
@@ -233,13 +239,27 @@ class GameEngine(private val context: Context) {
         val playerX = p?.virtualX ?: 0f
         sm?.update(dt, scrollSpeed, playerX)
 
-        // 4. Collision check (only if player is vulnerable)
+        // 4. Collectible collision check (Fudge)
+        if (p != null && sm != null && p.animState != PoochPlayer.AnimState.GAME_OVER) {
+            val collectedFudge = sm.checkFudgeCollision(p.hitbox)
+            if (collectedFudge != null) {
+                collectedFudge.onCollect()
+                fudgeCount++
+                SoundManager.playCrunch()
+                Log.d(TAG, "Fudge collected! Count: $fudgeCount")
+                if (fudgeCount >= GameConstants.FUDGES_FOR_SUPER) {
+                    fudgeCount = 0
+                    Log.d(TAG, "Fudge count reached 10 -> Resetting to 0 for Super Pooch")
+                }
+            }
+        }
+
+        // 5. Enemy collision check (only if player is vulnerable)
         if (p != null && sm != null && p.isVulnerable()) {
             val collidedEnemy = sm.checkPlayerCollision(p.hitbox)
             if (collidedEnemy != null) {
                 collidedEnemy.onPlayerCollision()
                 playerHP--
-
                 if (playerHP <= 0) {
                     playerHP = 0
                     state = GameState.GAME_OVER
@@ -253,7 +273,7 @@ class GameEngine(private val context: Context) {
             }
         }
 
-        // 5. Increment score over time
+        // 6. Increment score over time
         score += (scrollSpeed * dt * 0.1f).toInt()
     }
 
