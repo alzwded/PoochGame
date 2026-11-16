@@ -385,11 +385,13 @@ class GameEngine(private val context: Context) {
         // 1. Background layer
         renderBackground(canvas)
 
-        // 2. Enemies layer
-        spawnManager?.render(canvas, scaleX, scaleY)
-
-        // 3. Pooch player sprite (handles hurt flicker automatically)
+        // 2. Pooch player sprite (handles hurt flicker automatically)
+        // render below sprites, mostly just shy guys being knocked around towards the foreground
+        // TODO should have priority on game over
         pooch?.render(canvas, scaleX, scaleY, isSuper)
+
+        // 3. Enemies & pickups layer
+        spawnManager?.render(canvas, scaleX, scaleY)
 
         // 4. HUD
         renderHUD(canvas)
