@@ -196,4 +196,32 @@ class PoochPlayerTest {
         assertEquals(expectedGroundHeadY, player.virtualY, 0.001f)
         assertEquals(EntityRegistry.POOCH.baseScale, player.scale, 0.001f)
     }
+
+    @Test
+    fun `super cutscene hops in air then smoothly grows pooch to super scale`() {
+        player.triggerSuperCutscene()
+        assertEquals(PoochPlayer.AnimState.SUPER_CUTSCENE, player.animState)
+        val baseHeadY = player.getGroundHeadY(EntityRegistry.POOCH.baseScale)
+
+        // Mid-hop (at 0.12s of first hop) -> Pooch should be elevated above ground baseline
+        player.update(0.12f, false)
+        assertEquals(PoochPlayer.AnimState.SUPER_CUTSCENE, player.animState)
+        assertTrue(player.virtualY < baseHeadY) // elevated (smaller Y value)
+
+        // Advance past both hops into grow phase
+        val hopTotalDur = PoochPlayer.SUPER_HOP_FRAME_DURATION * 6f // 2 hops * 0.24s = 0.48s
+        player.update(hopTotalDur, false)
+        assertEquals(PoochPlayer.AnimState.SUPER_CUTSCENE, player.animState)
+
+        // Grow phase midway -> scale should be between baseScale and superScale
+        val expectedSuperScale = EntityRegistry.POOCH.baseScale * GameConstants.SUPER_MODE_SCALE
+        assertTrue(player.scale > EntityRegistry.POOCH.baseScale)
+        assertTrue(player.scale < expectedSuperScale)
+
+        // Advance past grow phase -> finish cutscene into WALK at superScale
+        player.update(PoochPlayer.SUPER_GROW_DURATION + 0.1f, false)
+        assertEquals(PoochPlayer.AnimState.WALK, player.animState)
+        assertEquals(expectedSuperScale, player.scale, 0.001f)
+        assertTrue(player.isCutsceneFinished)
+    }
 }

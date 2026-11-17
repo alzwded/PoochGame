@@ -339,10 +339,12 @@ class GameEngine(private val context: Context) {
                 Log.d(TAG, "Fudge collected! Count: $fudgeCount")
                 if (fudgeCount >= GameConstants.FUDGES_FOR_SUPER) {
                     fudgeCount = 0
-                    state = GameState.SUPER_TRANSITION
-                    SoundManager.stopBgm()
-                    p.triggerSuperCutscene()
-                    Log.d(TAG, "10 Fudges collected -> SUPER_TRANSITION cutscene started")
+                    if (p.isOnGround) {
+                        startSuperTransition()
+                    } else {
+                        pendingSuperTransition = true
+                        Log.d(TAG, "10 Fudges collected while mid-air -> Waiting for Pooch to land")
+                    }
                 }
             }
         }

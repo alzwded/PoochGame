@@ -430,7 +430,7 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
                     currentFrame = jumpFrames[frameIdx]
                     isMirrored = false
                     scale = baseScale
-                    val hopY = -Math.sin(progress * Math.PI).toFloat() * SUPER_HOP_HEIGHT
+                    val hopY = -kotlin.math.sin(progress * Math.PI).toFloat() * SUPER_HOP_HEIGHT
                     virtualY = getGroundHeadY(scale) + hopY
                 } else if (cutsceneTimer < hopDur * 2f) {
                     // Hop 2: facing left (mirrored), jump_1..jump_3
@@ -440,15 +440,14 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
                     currentFrame = jumpFrames[frameIdx]
                     isMirrored = true
                     scale = baseScale
-                    val hopY = -Math.sin(progress * Math.PI).toFloat() * SUPER_HOP_HEIGHT
+                    val hopY = -kotlin.math.sin(progress * Math.PI).toFloat() * SUPER_HOP_HEIGHT
                     virtualY = getGroundHeadY(scale) + hopY
                 } else if (cutsceneTimer < hopDur * 2f + growDur) {
-                    // Grow phase: facing right, walk_0 frame, scale up to 2x (superScale)
+                    // Grow phase: facing right, walk_0 frame, smoothly scale up to superScale
                     val relTime = cutsceneTimer - (hopDur * 2f)
                     val growProgress = (relTime / growDur).coerceIn(0f, 1f)
                     currentFrame = walkFrames[0]
                     isMirrored = false
-                    //val growProgress = ((cutsceneTimer - frameDur * 6f) / 0.18f).coerceIn(0f, 1f)
                     scale = baseScale + (superScale - baseScale) * growProgress
                     virtualY = getGroundHeadY(scale)
                 } else {
@@ -456,7 +455,6 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
                     endSuperCutscene()
                     virtualY = getGroundHeadY(scale)
                 }
-                virtualY = getGroundHeadY(scale)
             }
 
             AnimState.GAME_OVER -> {
