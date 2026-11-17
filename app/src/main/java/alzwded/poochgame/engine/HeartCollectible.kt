@@ -54,7 +54,7 @@ class HeartCollectible(private val atlas: SpriteAtlas) {
         virtualY = if (isFlying) {
             GameConstants.GROUND_Y - MAX_JUMP_HEIGHT /* was too high otherwise :-) */
         } else {
-            baseGroundY - 40f
+            baseGroundY
         }
         virtualX = spawnX
         updateHitbox()

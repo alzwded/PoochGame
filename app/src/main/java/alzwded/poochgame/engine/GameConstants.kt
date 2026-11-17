@@ -43,7 +43,7 @@ object GameConstants {
     const val TOWER_SPAWN_CUTOFF_SEC = 4.0f
 
     /** Scale multiplier applied to the player during super mode. */
-    const val SUPER_MODE_SCALE = 3.2f
+    const val SUPER_MODE_SCALE = 3f
     /** Duration of each frame during Super Mode cutscene. */
     const val SUPER_CUTSCENE_FRAME_DURATION = 0.12f
     /** Duration of scale down transition at the end of super mode. */
