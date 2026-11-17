@@ -36,3 +36,4 @@ google-services.json
 
 __*
 *.sqlite3
+dist/
