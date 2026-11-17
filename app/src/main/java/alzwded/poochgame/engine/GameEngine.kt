@@ -362,11 +362,7 @@ class GameEngine(private val context: Context) {
         if (p != null && sm != null && (p.isVulnerable() || isSuper)) {
             if (sm.checkPlayerCollision(p.hitbox)) {
                 if (isSuper) {
-                    if (Random.nextBoolean()) {
-                        SoundManager.playSmash()
-                    } else {
-                        SoundManager.playThump()
-                    }
+                    SoundManager.playSmash()
                     smashedCount++
                     Log.d(TAG, "Super Pooch smashed obstacle! Total smashed: $smashedCount")
                 } else {
