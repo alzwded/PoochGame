@@ -526,10 +526,10 @@ class GameEngine(private val context: Context) {
         val hFrames = hAtlas.frames
         if (hFrames.isEmpty()) return
 
-        // 1. Top row of hearts evenly distributed across screen width
+        // 1. Top row of hearts evenly distributed across screen width (moved down from 70f to 110f)
         val maxHp = GameConstants.MAX_HP
         val heartSlotWidth = GameConstants.VIRTUAL_WIDTH / maxHp.toFloat()
-        val heartY = 70f
+        val heartY = 110f
 
         for (i in 0 until playerHP.coerceIn(0, maxHp)) {
             val frameIndex = topHeartFrameIndices[i] % hFrames.size
@@ -554,10 +554,10 @@ class GameEngine(private val context: Context) {
             )
         }
 
-        // 2. Row of up to 10 fudge sprites scaled across the whole length of the screen
+        // 2. Row of up to 10 fudge sprites scaled across the whole length of the screen (moved down from 230f to 270f)
         val maxFudges = GameConstants.FUDGES_FOR_SUPER
         val fudgeSlotWidth = GameConstants.VIRTUAL_WIDTH / maxFudges.toFloat()
-        val fudgeY = 230f
+        val fudgeY = 270f
         val clampedFudgeCount = fudgeCount.coerceIn(0, maxFudges)
         for (i in 0 until clampedFudgeCount) {
             val frameName = "fudge_$i"
@@ -581,14 +581,14 @@ class GameEngine(private val context: Context) {
             )
         }
 
-        // 3. Smashed Counter Badge (Visible in Super Mode or after smashing Shy Guys)
+        // 3. Smashed Counter Badge (Visible in Super Mode or after smashing Shy Guys, positioned below fudge row at Y=390f)
         if (smashedCount > 0 || state == GameState.SUPER_MODE) {
             textPaint.textSize = 42f * scaleX
             textPaint.textAlign = Paint.Align.RIGHT
             canvas.drawText(
                 "SMASHED: $smashedCount",
-                screenWidth - (30f * scaleX),
-                110f * scaleY,
+                (GameConstants.VIRTUAL_WIDTH - 50f) * scaleX,
+                390f * scaleY,
                 textPaint
             )
             textPaint.textAlign = Paint.Align.LEFT
