@@ -35,7 +35,7 @@ class SpawnManager(
     // TODO uhm... these need to be optimized to have a total of MAX_SPRITES
     // Pre-allocated static pools (zero per-frame heap allocations)
     val enemies: Array<ShyGuyEnemy> = Array(MAX_SPRITES) { ShyGuyEnemy(shyguyAtlas) }
-    val towers: Array<Tower> = Array(MAX_SPRITES) { Tower(shyguyAtlas) }
+    val towers: Array<Tower> = Array(MAX_SPRITES) { Tower(shyguyAtlas, fudgeAtlas) }
     val fudges: Array<FudgeCollectible> = Array(MAX_SPRITES) { FudgeCollectible(fudgeAtlas) }
     val hearts: Array<HeartCollectible> = Array(MAX_SPRITES) { HeartCollectible(heartAtlas) }
 

@@ -7,13 +7,21 @@ import android.graphics.RectF
 import kotlin.random.Random
 
 /**
- * Entity representing a vertical stack/tower of Shy Guys as a unified object.
+ * Entity representing a vertical stack/tower of Shy Guys or Fudge as a unified object.
  * Has its own independent rendering, collision hitbox, and physics logic,
  * allowing custom business rules distinct from single [ShyGuyEnemy] units.
  *
  * Strictly zero-allocation per frame loop.
  */
-class Tower(private val shyguyAtlas: SpriteAtlas) {
+class Tower(
+    private val shyguyAtlas: SpriteAtlas,
+    private val fudgeAtlas: SpriteAtlas
+) {
+    enum class Type {
+        SHY_GUY,
+        FUDGE
+    }
+
     enum class State {
         INACTIVE,
         WALKING,
@@ -33,13 +41,24 @@ class Tower(private val shyguyAtlas: SpriteAtlas) {
         shyguyAtlas.getFrame("walk_$i")
             ?: throw IllegalStateException("Missing walk_$i frame in shyguy atlas")
     }
+
     val hurtFrames: Array<SpriteFrame> = Array(4) { i ->
         shyguyAtlas.getFrame("ohoh_$i")
             ?: throw IllegalStateException("Missing ohoh_$i frame in shyguy atlas")
     }
 
+    val fudgeFramesPool: List<SpriteFrame> = fudgeAtlas.frames
+    val currentFudgeFrames: Array<SpriteFrame> = Array(3) {
+        fudgeFramesPool.firstOrNull()
+            ?: SpriteFrame("fudge_0", 0, 0, 219, 212, 110, 162)
+    }
+
+    var type: Type = Type.SHY_GUY
+        private set
+
     var state: State = State.INACTIVE
         private set
+
     val isActive: Boolean get() = state != State.INACTIVE
 
     var virtualX: Float = 0f
@@ -67,20 +86,37 @@ class Tower(private val shyguyAtlas: SpriteAtlas) {
     private val dstRect = RectF()
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
 
-    fun spawn(spawnX: Float, towerHeight: Int = 3) {
+    fun spawn(spawnX: Float, towerHeight: Int = 3, forcedType: Type? = null) {
         state = State.WALKING
+        type = forcedType ?: if (Random.nextBoolean()) Type.SHY_GUY else Type.FUDGE
         virtualX = spawnX
         height = towerHeight
-        scale = EntityRegistry.SHY_GUY.baseScale
-        targetScale = scale
-        initialHurtScale = scale
-        virtualY = GameConstants.GROUND_Y - (GROUND_OFFSET * scale)
+
+        if (type == Type.SHY_GUY) {
+            scale = EntityRegistry.SHY_GUY.baseScale
+            targetScale = scale
+            initialHurtScale = scale
+            virtualY = GameConstants.GROUND_Y - (GROUND_OFFSET * scale)
+            currentWalkFrame = walkFrames[0]
+        } else {
+            scale = EntityRegistry.FUDGE.baseScale
+            targetScale = scale
+            initialHurtScale = scale
+            if (fudgeFramesPool.isNotEmpty()) {
+                for (i in 0 until 3) {
+                    currentFudgeFrames[i] = fudgeFramesPool.random()
+                }
+            }
+            val bottomFudge = currentFudgeFrames[0]
+            val groundOffset = (bottomFudge.height - bottomFudge.originY).toFloat()
+            virtualY = GameConstants.GROUND_Y - (groundOffset * scale)
+        }
+
         velocityX = 0f
         velocityY = 0f
         walkTimer = 0f
         hurtTimer = 0f
         isCleared = false
-        currentWalkFrame = walkFrames[0]
         updateHitbox()
     }
 
@@ -103,14 +139,17 @@ class Tower(private val shyguyAtlas: SpriteAtlas) {
             State.INACTIVE -> return
             State.WALKING -> {
                 virtualX -= (scrollSpeed + WALK_SPEED) * dt
-                walkTimer += dt
-                val frameIdx = ((walkTimer / WALK_FRAME_DURATION).toInt()) % 6
-                currentWalkFrame = walkFrames[frameIdx]
+                if (type == Type.SHY_GUY) {
+                    walkTimer += dt
+                    val frameIdx = ((walkTimer / WALK_FRAME_DURATION).toInt()) % 6
+                    currentWalkFrame = walkFrames[frameIdx]
+                }
                 updateHitbox()
 
                 if (!isCleared && virtualX < playerVirtualX - 40f) {
                     isCleared = true
                 }
+
                 if (virtualX < -250f) {
                     state = State.INACTIVE
                     isCleared = true
@@ -123,8 +162,10 @@ class Tower(private val shyguyAtlas: SpriteAtlas) {
                 virtualY += velocityY * dt
                 virtualX += velocityX * dt
 
-                val frameIdx = ((hurtTimer / HURT_FRAME_DURATION).toInt()) % 4
-                currentHurtFrame = hurtFrames[frameIdx]
+                if (type == Type.SHY_GUY) {
+                    val frameIdx = ((hurtTimer / HURT_FRAME_DURATION).toInt()) % 4
+                    currentHurtFrame = hurtFrames[frameIdx]
+                }
 
                 val progress = (hurtTimer / FLING_DURATION).coerceIn(0f, 1f)
                 scale = initialHurtScale + (targetScale - initialHurtScale) * progress
@@ -137,11 +178,10 @@ class Tower(private val shyguyAtlas: SpriteAtlas) {
     }
 
     private fun updateHitbox() {
-        val f = currentWalkFrame
+        val f = if (type == Type.SHY_GUY) currentWalkFrame else currentFudgeFrames[0]
         val stackSpacing = 130f * scale
         val singleW = f.width * scale
         val singleH = f.height * scale
-
         val left = virtualX - (f.originX * scale)
         val bottom = virtualY - (f.originY * scale) + singleH
         val top = virtualY - ((height - 1) * stackSpacing) - (f.originX * scale)
@@ -165,27 +205,50 @@ class Tower(private val shyguyAtlas: SpriteAtlas) {
 
     fun render(canvas: Canvas, scaleX: Float, scaleY: Float) {
         if (state == State.INACTIVE) return
-        val bitmap = shyguyAtlas.bitmap ?: return
-        val mirrored = (state == State.WALKING || velocityX < 0)
-        val frame = if (state == State.WALKING) currentWalkFrame else currentHurtFrame
         val stackSpacing = 130f * scale
 
-        for (h in 0 until height) {
-            val yPos = virtualY - (h * stackSpacing)
-            SpriteRenderer.drawFrame(
-                canvas = canvas,
-                bitmap = bitmap,
-                frame = frame,
-                virtualX = virtualX,
-                virtualY = yPos,
-                scale = scale,
-                scaleX = scaleX,
-                scaleY = scaleY,
-                mirrored = mirrored,
-                paint = paint,
-                srcRect = srcRect,
-                dstRect = dstRect
-            )
+        if (type == Type.SHY_GUY) {
+            val bitmap = shyguyAtlas.bitmap ?: return
+            val mirrored = (state == State.WALKING || velocityX < 0)
+            val frame = if (state == State.WALKING) currentWalkFrame else currentHurtFrame
+
+            for (h in 0 until height) {
+                val yPos = virtualY - (h * stackSpacing)
+                SpriteRenderer.drawFrame(
+                    canvas = canvas,
+                    bitmap = bitmap,
+                    frame = frame,
+                    virtualX = virtualX,
+                    virtualY = yPos,
+                    scale = scale,
+                    scaleX = scaleX,
+                    scaleY = scaleY,
+                    mirrored = mirrored,
+                    paint = paint,
+                    srcRect = srcRect,
+                    dstRect = dstRect
+                )
+            }
+        } else {
+            val bitmap = fudgeAtlas.bitmap ?: return
+            for (h in 0 until height) {
+                val yPos = virtualY - (h * stackSpacing)
+                val frame = currentFudgeFrames[h.coerceIn(0, 2)]
+                SpriteRenderer.drawFrame(
+                    canvas = canvas,
+                    bitmap = bitmap,
+                    frame = frame,
+                    virtualX = virtualX,
+                    virtualY = yPos,
+                    scale = scale,
+                    scaleX = scaleX,
+                    scaleY = scaleY,
+                    mirrored = false,
+                    paint = paint,
+                    srcRect = srcRect,
+                    dstRect = dstRect
+                )
+            }
         }
     }
 
