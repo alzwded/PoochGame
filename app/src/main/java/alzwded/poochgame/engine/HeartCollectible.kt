@@ -52,7 +52,7 @@ class HeartCollectible(private val atlas: SpriteAtlas) {
         val groundOffset = (currentFrame.height - currentFrame.originY) * scale
         val baseGroundY = GameConstants.GROUND_Y - groundOffset
         virtualY = if (isFlying) {
-            baseGroundY - MAX_JUMP_HEIGHT
+            GameConstants.GROUND_Y - MAX_JUMP_HEIGHT /* was too high otherwise :-) */
         } else {
             baseGroundY - 40f
         }
