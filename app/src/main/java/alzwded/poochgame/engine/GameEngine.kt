@@ -67,6 +67,8 @@ class GameEngine(private val context: Context) {
     // --- Entities & Spawner ---
     var pooch: PoochPlayer? = null
         private set
+    var splashShyGuy: ShyGuyEnemy? = null
+        private set
     var spawnManager: SpawnManager? = null
         private set
 
@@ -157,6 +159,7 @@ class GameEngine(private val context: Context) {
             this.fudgeAtlas = fudgeAtlas
             this.heartAtlas = heartAtlas
             spawnManager = SpawnManager(shyguyAtlas, fudgeAtlas, heartAtlas)
+            splashShyGuy = ShyGuyEnemy(shyguyAtlas)
             Log.i(TAG, "SpawnManager initialized with atlases '${shyguyAtlas.key}', '${fudgeAtlas.key}', & '${heartAtlas.key}'")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load spawner atlases", e)
@@ -168,7 +171,12 @@ class GameEngine(private val context: Context) {
      */
     fun resetPlayer() {
         pooch?.reset()
-        spawnManager?.reset()
+        if (state == GameState.TOUCH_TO_START) {
+            pooch?.triggerSplashHop()
+            splashShyGuy?.triggerWave(GameConstants.VIRTUAL_WIDTH - 260f)
+        } else {
+            splashShyGuy?.reset()
+        }
         playerHP = GameConstants.MAX_HP
         fudgeCount = 0
         score = 0
@@ -216,6 +224,7 @@ class GameEngine(private val context: Context) {
         when (state) {
             GameState.TOUCH_TO_START -> {
                 pooch?.update(dt * 0.75f, false)
+                splashShyGuy?.update(dt * 0.75f, 0f, 0f)
             }
             GameState.PLAYING, GameState.SUPER_MODE -> {
                 updatePlaying(dt)
@@ -424,6 +433,7 @@ class GameEngine(private val context: Context) {
         renderBackground(canvas)
 
         pooch?.render(canvas, scaleX, scaleY, false)
+        splashShyGuy?.render(canvas, scaleX, scaleY)
 
         splashPaint.textSize = 80f * scaleX
         canvas.drawText(

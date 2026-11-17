@@ -22,7 +22,8 @@ class ShyGuyEnemy(private val atlas: SpriteAtlas) {
     enum class State {
         INACTIVE,
         WALKING,
-        HURT_FLING
+        HURT_FLING,
+        WAVING
     }
 
     companion object {
@@ -42,6 +43,11 @@ class ShyGuyEnemy(private val atlas: SpriteAtlas) {
     val hurtFrames: Array<SpriteFrame> = Array(4) { i ->
         atlas.getFrame("ohoh_$i")
             ?: throw IllegalStateException("Missing ohoh_$i frame in shyguy atlas")
+    }
+
+    val waveFrames: Array<SpriteFrame> = Array(2) { i ->
+        atlas.getFrame("wave_$i")
+            ?: throw IllegalStateException("Missing wave_$i frame in shyguy atlas")
     }
 
     var state: State = State.INACTIVE
@@ -90,6 +96,25 @@ class ShyGuyEnemy(private val atlas: SpriteAtlas) {
         isCleared = false
         currentFrame = walkFrames[0]
         updateHitbox()
+    }
+
+    /**
+     * Trigger static waving animation for the splash screen.
+     */
+    fun triggerWave(spawnX: Float) {
+        state = State.WAVING
+        virtualX = spawnX
+        scale = EntityRegistry.SHY_GUY.baseScale
+        targetScale = scale
+        initialHurtScale = scale
+        virtualY = GameConstants.GROUND_Y - (GROUND_OFFSET * scale)
+        velocityX = 0f
+        velocityY = 0f
+        walkTimer = 0f
+        hurtTimer = 0f
+        isCleared = true
+        currentFrame = waveFrames[0]
+        clearHitbox()
     }
 
     /**
@@ -165,6 +190,13 @@ class ShyGuyEnemy(private val atlas: SpriteAtlas) {
                     state = State.INACTIVE
                 }
             }
+
+            State.WAVING -> {
+                walkTimer += dt
+                val frameIdx = ((walkTimer / 0.5f).toInt()) % 2
+                currentFrame = waveFrames[frameIdx]
+                clearHitbox()
+            }
         }
     }
 
@@ -196,8 +228,8 @@ class ShyGuyEnemy(private val atlas: SpriteAtlas) {
         if (state == State.INACTIVE) return
 
         val bitmap = atlas.bitmap ?: return
-        // Walk frames in sheet face right, so mirror them to face left!
-        val mirrored = (state == State.WALKING || velocityX < 0)
+        // Walk and wave frames face right in atlas, so mirror them to face left toward Pooch!
+        val mirrored = (state == State.WALKING || state == State.WAVING || velocityX < 0)
 
         SpriteRenderer.drawFrame(
             canvas = canvas,

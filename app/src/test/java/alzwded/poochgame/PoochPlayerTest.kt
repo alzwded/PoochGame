@@ -224,4 +224,28 @@ class PoochPlayerTest {
         assertEquals(expectedSuperScale, player.scale, 0.001f)
         assertTrue(player.isCutsceneFinished)
     }
+
+    @Test
+    fun `triggerSplashHop continuously loops hop animation`() {
+        player.triggerSplashHop()
+        assertEquals(PoochPlayer.AnimState.SPLASH_HOP, player.animState)
+        val baseHeadY = player.getGroundHeadY(EntityRegistry.POOCH.baseScale)
+
+        // Hop 1 (facing right) - elevated
+        player.update(0.12f, false)
+        assertEquals(PoochPlayer.AnimState.SPLASH_HOP, player.animState)
+        assertFalse(player.isMirrored)
+        assertTrue(player.virtualY < baseHeadY)
+
+        // Hop 2 (facing left) - elevated and mirrored
+        player.update(0.24f, false)
+        assertEquals(PoochPlayer.AnimState.SPLASH_HOP, player.animState)
+        assertTrue(player.isMirrored)
+        assertTrue(player.virtualY < baseHeadY)
+
+        // Loops back to Hop 1 (facing right) after completing 2 full hops (0.48s)
+        player.update(0.24f, false)
+        assertEquals(PoochPlayer.AnimState.SPLASH_HOP, player.animState)
+        assertFalse(player.isMirrored)
+    }
 }

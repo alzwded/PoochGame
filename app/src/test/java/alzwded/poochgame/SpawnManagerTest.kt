@@ -48,6 +48,17 @@ class SpawnManagerTest {
                 )
             )
         }
+        for (i in 0..1) {
+            shyguyFrames.add(
+                SpriteFrame(
+                    id = "wave_$i",
+                    x = i * 200, y = 500,
+                    width = 176, height = 189,
+                    originX = 84, originY = 164,
+                    chromaKey = "#ffffff", chromaThreshold = 28
+                )
+            )
+        }
         shyguyAtlas = SpriteAtlas("shyguy", null, shyguyFrames)
 
         val fudgeFrames = mutableListOf<SpriteFrame>()

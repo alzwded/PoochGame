@@ -33,7 +33,8 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
         JUMP_LANDING,
         HURT,
         SUPER_CUTSCENE,
-        GAME_OVER
+        GAME_OVER,
+        SPLASH_HOP
     }
 
     companion object {
@@ -236,6 +237,20 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
     }
 
     /**
+     * Trigger continuous short hop animation for the splash screen.
+     */
+    fun triggerSplashHop() {
+        animState = AnimState.SPLASH_HOP
+        cutsceneTimer = 0f
+        isInvincible = true
+        isVisible = true
+        isMirrored = false
+        scale = EntityRegistry.POOCH.baseScale
+        targetScale = scale
+        currentFrame = jumpFrames[1]
+    }
+
+    /**
      * Trigger a jump if the player is grounded (or in landing recovery).
      *
      * @return true if jump was triggered, false otherwise.
@@ -245,6 +260,7 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
             (!isOnGround && animState != AnimState.JUMP_LANDING) ||
             animState == AnimState.HURT ||
             animState == AnimState.SUPER_CUTSCENE ||
+            animState == AnimState.SPLASH_HOP ||
             animState == AnimState.GAME_OVER
         ) {
             return false
@@ -473,6 +489,33 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
                 val progress = (gameOverTimer / GAME_OVER_FLING_DURATION).coerceIn(0f, 1f)
                 scale = initialGameOverScale + (targetScale - initialGameOverScale) * progress
             }
+
+            AnimState.SPLASH_HOP -> {
+                cutsceneTimer += dt
+                val hopDur = SUPER_HOP_FRAME_DURATION * 3f // 0.24s per hop
+                val cycleTime = cutsceneTimer % (hopDur * 2f)
+
+                if (cycleTime < hopDur) {
+                    // Hop 1: facing right, jump_1..jump_3
+                    val progress = (cycleTime / hopDur).coerceIn(0f, 1f)
+                    val frameIdx = 1 + (progress * 2.999f).toInt().coerceIn(0, 2)
+                    currentFrame = jumpFrames[frameIdx]
+                    isMirrored = false
+                    scale = baseScale
+                    val hopY = -kotlin.math.sin(progress * Math.PI).toFloat() * SUPER_HOP_HEIGHT
+                    virtualY = getGroundHeadY(scale) + hopY
+                } else {
+                    // Hop 2: facing left (mirrored), jump_1..jump_3
+                    val relTime = cycleTime - hopDur
+                    val progress = (relTime / hopDur).coerceIn(0f, 1f)
+                    val frameIdx = 1 + (progress * 2.999f).toInt().coerceIn(0, 2)
+                    currentFrame = jumpFrames[frameIdx]
+                    isMirrored = true
+                    scale = baseScale
+                    val hopY = -kotlin.math.sin(progress * Math.PI).toFloat() * SUPER_HOP_HEIGHT
+                    virtualY = getGroundHeadY(scale) + hopY
+                }
+            }
         }
 
         updateHitbox(scale)
@@ -505,7 +548,7 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
         if (!isVisible) return
 
         val bitmap = atlas.bitmap ?: return
-        val mirrored = if (animState == AnimState.SUPER_CUTSCENE) isMirrored else (animState == AnimState.GAME_OVER && isMirrored)
+        val mirrored = if (animState == AnimState.SUPER_CUTSCENE || animState == AnimState.SPLASH_HOP) isMirrored else (animState == AnimState.GAME_OVER && isMirrored)
         SpriteRenderer.drawFrame(
             canvas = canvas,
             bitmap = bitmap,

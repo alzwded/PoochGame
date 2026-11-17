@@ -42,6 +42,18 @@ class ShyGuyEnemyTest {
                 )
             )
         }
+        // 2 wave frames
+        for (i in 0..1) {
+            frames.add(
+                SpriteFrame(
+                    id = "wave_$i",
+                    x = i * 200, y = 500,
+                    width = 176, height = 189,
+                    originX = 84, originY = 164,
+                    chromaKey = "#ffffff", chromaThreshold = 28
+                )
+            )
+        }
 
         atlas = SpriteAtlas("shyguy", null, frames)
         enemy = ShyGuyEnemy(atlas)
@@ -127,5 +139,21 @@ class ShyGuyEnemyTest {
         enemy.virtualY = GameConstants.VIRTUAL_HEIGHT + 300f
         enemy.update(0.01f, 550f, 260f)
         assertFalse(enemy.isActive)
+    }
+
+    @Test
+    fun `triggerWave alternates wave_0 and wave_1 every 0_5s`() {
+        enemy.triggerWave(820f)
+        assertEquals(ShyGuyEnemy.State.WAVING, enemy.state)
+        assertEquals("wave_0", enemy.currentFrame.id)
+        assertEquals(0f, enemy.hitbox.width(), 0.001f)
+
+        // Advance 0.51s -> switches to wave_1
+        enemy.update(0.51f, 0f, 0f)
+        assertEquals("wave_1", enemy.currentFrame.id)
+
+        // Advance another 0.51s -> loops back to wave_0
+        enemy.update(0.51f, 0f, 0f)
+        assertEquals("wave_0", enemy.currentFrame.id)
     }
 }
