@@ -160,7 +160,8 @@ class Tower(
         when (state) {
             State.INACTIVE -> return
             State.WALKING -> {
-                virtualX -= (scrollSpeed + WALK_SPEED) * dt
+                val currentSpeed = if (type == Type.SHY_GUY) scrollSpeed + WALK_SPEED else scrollSpeed
+                virtualX -= currentSpeed * dt
                 if (type == Type.SHY_GUY) {
                     walkTimer += dt
                     val frameIdx = ((walkTimer / WALK_FRAME_DURATION).toInt()) % 6
