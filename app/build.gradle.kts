@@ -16,6 +16,7 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "1.0"
+        manifestPlaceholders["appName"] = "Pooch Runner"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -32,6 +33,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            manifestPlaceholders["appName"] = "Pooch Runner (Debug)"
+        }
         release {
             manifestPlaceholders["appName"] = "Pooch Runner"
             applicationIdSuffix = ".gold"
