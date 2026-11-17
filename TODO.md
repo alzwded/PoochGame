@@ -3,8 +3,8 @@
   + [x] shy guys
   + [x] fudge
   + [x] hearts
-  + [ ] tap to start text (can be font rendering)
-- [ ] audio
+  + [x] tap to start text (can be font rendering)
+- [x] audio
   + [x] arf arf
   + [x] sad puppy sound
   + [x] steps
@@ -30,5 +30,5 @@
 - [x] game over animation
 - [x] shy guy hurt animation
 - [x] power up scene on 10 fudges + fudge/shy guy towers (5s)
-- [ ] shy guys smashed counter
-- [ ] on main screen, have pooch jumping around and shagay waving :-)
+- [x] shy guys smashed counter
+- [x] on main screen, have pooch jumping around and shagay waving :-)
