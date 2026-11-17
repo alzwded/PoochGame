@@ -2,6 +2,8 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
+val hasKeystore = !System.getenv("RELEASE_STORE_FILE").isNullOrEmpty()
+
 android {
     namespace = "alzwded.poochgame"
     compileSdk {
@@ -18,11 +20,30 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (hasKeystore) {
+            create("release") {
+                storeFile = file(System.getenv("RELEASE_STORE_FILE") ?: "/dev/null")
+                storePassword = System.getenv("RELEASE_STORE_PASSWORD")
+                keyAlias = System.getenv("RELEASE_KEY_ALIAS")
+                keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            manifestPlaceholders["appName"] = "Pooch Runner"
+            applicationIdSuffix = ".gold"
+
             optimization {
                 enable = true
                 packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
+            }
+
+            // don't sign by default assembleRelease
+            if (hasKeystore) {
+                signingConfig = signingConfigs.getByName("release")
             }
         }
     }
