@@ -35,19 +35,20 @@ class SpawnManager(
     // TODO uhm... these need to be optimized to have a total of MAX_SPRITES
     // Pre-allocated static pools (zero per-frame heap allocations)
     val enemies: Array<ShyGuyEnemy> = Array(MAX_SPRITES) { ShyGuyEnemy(shyguyAtlas) }
+    val towers: Array<Tower> = Array(MAX_SPRITES) { Tower(shyguyAtlas) }
     val fudges: Array<FudgeCollectible> = Array(MAX_SPRITES) { FudgeCollectible(fudgeAtlas) }
     val hearts: Array<HeartCollectible> = Array(MAX_SPRITES) { HeartCollectible(heartAtlas) }
 
     /** Sequential counter for slot ticks. */
     var slotIndex: Int = 0
         private set
-
     /** Accumulated scroll distance used to trigger slot ticks. */
     var accumulatedDistance: Float = 0f
         private set
-
     /** Reference to the most recently spawned enemy to verify prior clearance. */
     var lastSpawnedEnemy: ShyGuyEnemy? = null
+        private set
+    var lastSpawnedTower: Tower? = null
         private set
 
     /** True if the spawner is operating in Super Mode. */
@@ -60,6 +61,7 @@ class SpawnManager(
             var count = 0
             for (i in 0 until MAX_SPRITES) {
                 if (enemies[i].isActive) count++
+                if (towers[i].isActive) count++
             }
             return count
         }
@@ -67,25 +69,30 @@ class SpawnManager(
     /**
      * True if a new enemy is eligible to spawn:
      * 1. Total active sprites < 64.
-     * 2. The previous enemy has been cleared (passed by player, collided with, or despawned).
+     * 2. The previous enemy or tower has been cleared (passed by player, collided with, or despawned).
      */
     val canSpawnEnemy: Boolean
         get() {
             if (activeCount >= MAX_SPRITES) return false
-            val last = lastSpawnedEnemy ?: return true
-            return last.isCleared || !last.isActive
+            val lastE = lastSpawnedEnemy
+            val lastT = lastSpawnedTower
+            val enemyCleared = lastE == null || lastE.isCleared || !lastE.isActive
+            val towerCleared = lastT == null || lastT.isCleared || !lastT.isActive
+            return enemyCleared && towerCleared
         }
 
     /**
-     * Reset spawner state and deactivate all pooled enemies.
+     * Reset spawner state and deactivate all pooled entities.
      */
     fun reset() {
         for (i in 0 until MAX_SPRITES) {
             enemies[i].reset()
+            towers[i].reset()
             fudges[i].reset()
             hearts[i].reset()
         }
         lastSpawnedEnemy = null
+        lastSpawnedTower = null
         slotIndex = 0
         accumulatedDistance = 0f
         isSuperMode = false
@@ -118,6 +125,9 @@ class SpawnManager(
         for (i in 0 until MAX_SPRITES) {
             if (enemies[i].isActive) {
                 enemies[i].update(dt, scrollSpeed, playerVirtualX)
+            }
+            if (towers[i].isActive) {
+                towers[i].update(dt, scrollSpeed, playerVirtualX)
             }
             if (fudges[i].isActive) {
                 fudges[i].update(dt, scrollSpeed, playerVirtualX)
@@ -240,40 +250,50 @@ class SpawnManager(
     }
 
     /**
-     * Spawns a vertical stack/tower of Shy Guys (e.g. 3 stacked vertically).
+     * Spawns a vertical stack/tower of Shy Guys (e.g. 3 stacked vertically) using a dedicated [Tower] object.
      */
-    fun spawnShyGuyTower(height: Int = 3) {
-        if (!canSpawnEnemy) return
-        val stackSpacing = 130f * EntityRegistry.SHY_GUY.baseScale
-        for (h in 0 until height) {
-            for (i in 0 until MAX_SPRITES) {
-                val enemy = enemies[i]
-                if (!enemy.isActive) {
-                    enemy.spawn(SPAWN_X, yOffset = h * stackSpacing)
-                    lastSpawnedEnemy = enemy
-                    break
-                }
+    fun spawnShyGuyTower(height: Int = 3): Tower? {
+        if (!canSpawnEnemy) return null
+        for (i in 0 until MAX_SPRITES) {
+            val tower = towers[i]
+            if (!tower.isActive) {
+                tower.spawn(SPAWN_X, height)
+                lastSpawnedTower = tower
+                Log.d(TAG, "Spawned Shy Guy Tower (height $height) on slot $slotIndex at slot index $i")
+                return tower
             }
         }
+        Log.w(TAG, "Failed to spawn Shy Guy Tower: pool of $MAX_SPRITES is full")
+        return null
     }
 
     /**
-     * Checks if the player's collision bounds intersect with any active walking enemy.
+     * Checks if the player's collision bounds intersect with any active walking enemy or tower.
      * ZERO allocations.
      *
      * @param playerHitbox Pre-allocated RectF representing the player's inset hitbox.
-     * @return The colliding enemy, or null if no collision occurred.
+     * @return True if a collision occurred (and onPlayerCollision was triggered).
      */
-    fun checkPlayerCollision(playerHitbox: RectF): ShyGuyEnemy? {
+    fun checkPlayerCollision(playerHitbox: RectF): Boolean {
         for (i in 0 until MAX_SPRITES) {
             val enemy = enemies[i]
             if (enemy.state == ShyGuyEnemy.State.WALKING &&
                 intersects(playerHitbox, enemy.hitbox)
             ) {
-                return enemy
+                enemy.onPlayerCollision()
+                return true
             }
         }
-        return null
+        for (i in 0 until MAX_SPRITES) {
+            val tower = towers[i]
+            if (tower.state == Tower.State.WALKING &&
+                intersects(playerHitbox, tower.hitbox)
+            ) {
+                tower.onPlayerCollision()
+                return true
+            }
+        }
+        return false
     }
 
     fun checkFudgeCollision(playerHitbox: RectF): FudgeCollectible? {
@@ -308,6 +328,11 @@ class SpawnManager(
         for (i in 0 until MAX_SPRITES) {
             if (enemies[i].isActive) {
                 enemies[i].render(canvas, scaleX, scaleY)
+            }
+        }
+        for (i in 0 until MAX_SPRITES) {
+            if (towers[i].isActive) {
+                towers[i].render(canvas, scaleX, scaleY)
             }
         }
     }

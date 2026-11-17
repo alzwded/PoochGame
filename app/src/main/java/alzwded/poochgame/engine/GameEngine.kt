@@ -358,15 +358,17 @@ class GameEngine(private val context: Context) {
             }
         }
 
-        // 5. Enemy collision check (only if player is vulnerable or in Super Mode)
+        // 5. Enemy / Tower collision check (only if player is vulnerable or in Super Mode)
         if (p != null && sm != null && (p.isVulnerable() || isSuper)) {
-            val collidedEnemy = sm.checkPlayerCollision(p.hitbox)
-            if (collidedEnemy != null) {
-                collidedEnemy.onPlayerCollision()
+            if (sm.checkPlayerCollision(p.hitbox)) {
                 if (isSuper) {
-                    SoundManager.playSmash()
+                    if (Random.nextBoolean()) {
+                        SoundManager.playSmash()
+                    } else {
+                        SoundManager.playThump()
+                    }
                     smashedCount++
-                    Log.d(TAG, "Super Pooch smashed Shy Guy! Total smashed: $smashedCount")
+                    Log.d(TAG, "Super Pooch smashed obstacle! Total smashed: $smashedCount")
                 } else {
                     if (Random.nextBoolean()) {
                         SoundManager.playSmash()
