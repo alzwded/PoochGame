@@ -26,6 +26,7 @@ class GameEngine(private val context: Context) {
     // --- Game State ---
     var state: GameState = GameState.TOUCH_TO_START
         private set
+    private var pendingSuperTransition: Boolean = false
 
     // --- Viewport ---
     /** Physical screen dimensions (set once surface is created). */
@@ -74,6 +75,9 @@ class GameEngine(private val context: Context) {
         private set
     private var fudgeCount: Int = 0
     private var score: Int = 0
+    private var superModeTimer: Float = 0f
+    var smashedCount: Int = 0
+        private set
     private var heartAtlas: SpriteAtlas? = null
     private var fudgeAtlas: SpriteAtlas? = null
     private val topHeartFrameIndices = IntArray(GameConstants.MAX_HP) { Random.nextInt(8) }
@@ -168,7 +172,10 @@ class GameEngine(private val context: Context) {
         playerHP = GameConstants.MAX_HP
         fudgeCount = 0
         score = 0
+        superModeTimer = 0f
+        smashedCount = 0
         bgScrollX = 0f
+        pendingSuperTransition = false
     }
 
     /**
@@ -182,11 +189,11 @@ class GameEngine(private val context: Context) {
                 SoundManager.playBgm()
                 Log.d(TAG, "Tap → PLAYING")
             }
-            GameState.PLAYING, GameState.SUPER_MODE, GameState.HURT -> {
+            GameState.PLAYING, GameState.HURT -> {
                 pooch?.jump()
             }
-            GameState.GAME_OVER -> {
-                // Ignore taps during death animation; engine resets automatically
+            GameState.SUPER_MODE, GameState.SUPER_TRANSITION, GameState.GAME_OVER -> {
+                // Ignore taps during super mode, cutscenes, and death animations
             }
         }
     }
@@ -213,6 +220,9 @@ class GameEngine(private val context: Context) {
             GameState.PLAYING, GameState.SUPER_MODE -> {
                 updatePlaying(dt)
             }
+            GameState.SUPER_TRANSITION -> {
+                updateSuperTransition(dt)
+            }
             GameState.HURT -> {
                 updatePlaying(dt)
                 if (pooch?.animState != PoochPlayer.AnimState.HURT) {
@@ -226,10 +236,57 @@ class GameEngine(private val context: Context) {
     }
 
     /**
+     * Entering Super mode cutscene
+     */
+    private fun updateSuperTransition(dt: Float) {
+        val p = pooch ?: return
+        p.update(dt, isSuperMode = false)
+        // Freeze background scrolling and entity updates during cutscene
+        spawnManager?.update(0f, 0f, p.virtualX, playerHP)
+        if (p.isCutsceneFinished) {
+            state = GameState.SUPER_MODE
+            superModeTimer = GameConstants.SUPER_MODE_DURATION
+            SoundManager.playBgm("audio/bg_super.m4a")
+            Log.d(TAG, "Super Cutscene finished -> ENTERING SUPER_MODE")
+        }
+    }
+
+    private fun startSuperTransition() {
+        val p = pooch ?: return
+        state = GameState.SUPER_TRANSITION
+        SoundManager.stopBgm()
+        p.triggerSuperCutscene()
+        Log.d(TAG, "Starting SUPER_TRANSITION cutscene after landing")
+    }
+
+    /**
      * Core gameplay update: scroll, player physics, spawning, collisions.
      */
     private fun updatePlaying(dt: Float) {
+        val p = pooch
         val isSuper = (state == GameState.SUPER_MODE)
+
+        // Check if player landed from a jump to trigger pending super mode transition
+        if (pendingSuperTransition && (p?.isOnGround == true)) {
+            pendingSuperTransition = false
+            startSuperTransition()
+            return
+        }
+
+        if (isSuper) {
+            superModeTimer -= dt
+            if (superModeTimer <= 0f) {
+                superModeTimer = 0f
+                state = GameState.PLAYING
+                p?.exitSuperMode()
+                SoundManager.playBgm(SoundManager.BGM_MAIN)
+                Log.d(TAG, "Super Mode timer expired -> Returning to PLAYING")
+            }
+        }
+
+        val superElapsedTime = GameConstants.SUPER_MODE_DURATION - superModeTimer
+        val isTowerSpawningActive = isSuper && (superElapsedTime <= GameConstants.TOWER_SPAWN_CUTOFF_SEC)
+
         val scrollSpeed = if (isSuper) {
             GameConstants.SUPER_SCROLL_SPEED
         } else {
@@ -251,13 +308,12 @@ class GameEngine(private val context: Context) {
         }
 
         // 2. Update Pooch kinematics & animation
-        val p = pooch
-        p?.update(dt, isSuper)
+        p?.update(dt, isSuper, superModeTimer)
 
         // 3. Update spawner & enemies
         val sm = spawnManager
         val playerX = p?.virtualX ?: 0f
-        sm?.update(dt, scrollSpeed, playerX, playerHP)
+        sm?.update(dt, scrollSpeed, playerX, playerHP, isSuperMode = isTowerSpawningActive)
 
         // 4. Collectible collision checks (Heart & Fudge)
         if (p != null && sm != null && p.animState != PoochPlayer.AnimState.GAME_OVER) {
@@ -283,32 +339,40 @@ class GameEngine(private val context: Context) {
                 Log.d(TAG, "Fudge collected! Count: $fudgeCount")
                 if (fudgeCount >= GameConstants.FUDGES_FOR_SUPER) {
                     fudgeCount = 0
-                    Log.d(TAG, "Fudge count reached 10 -> Resetting to 0 for Super Pooch")
+                    state = GameState.SUPER_TRANSITION
+                    SoundManager.stopBgm()
+                    p.triggerSuperCutscene()
+                    Log.d(TAG, "10 Fudges collected -> SUPER_TRANSITION cutscene started")
                 }
             }
         }
 
-        // 5. Enemy collision check (only if player is vulnerable)
-        if (p != null && sm != null && p.isVulnerable()) {
+        // 5. Enemy collision check (only if player is vulnerable or in Super Mode)
+        if (p != null && sm != null && (p.isVulnerable() || isSuper)) {
             val collidedEnemy = sm.checkPlayerCollision(p.hitbox)
             if (collidedEnemy != null) {
                 collidedEnemy.onPlayerCollision()
-                // Randomly play smash or sadpup on enemy collision, unless in super mode
-                if (isSuper || Random.nextBoolean()) {
+                if (isSuper) {
                     SoundManager.playSmash()
+                    smashedCount++
+                    Log.d(TAG, "Super Pooch smashed Shy Guy! Total smashed: $smashedCount")
                 } else {
-                    SoundManager.playSadPup()
-                }
-                playerHP--
-                if (playerHP <= 0) {
-                    playerHP = 0
-                    state = GameState.GAME_OVER
-                    p.triggerGameOver()
-                    Log.d(TAG, "Collision! All hearts depleted -> GAME_OVER")
-                } else {
-                    state = GameState.HURT
-                    p.triggerHurt()
-                    Log.d(TAG, "Collision! Hearts remaining: $playerHP -> HURT")
+                    if (Random.nextBoolean()) {
+                        SoundManager.playSmash()
+                    } else {
+                        SoundManager.playSadPup()
+                    }
+                    playerHP--
+                    if (playerHP <= 0) {
+                        playerHP = 0
+                        state = GameState.GAME_OVER
+                        p.triggerGameOver()
+                        Log.d(TAG, "Collision! All hearts depleted -> GAME_OVER")
+                    } else {
+                        state = GameState.HURT
+                        p.triggerHurt()
+                        Log.d(TAG, "Collision! Hearts remaining: $playerHP -> HURT")
+                    }
                 }
             }
         }
@@ -346,7 +410,7 @@ class GameEngine(private val context: Context) {
 
         when (state) {
             GameState.TOUCH_TO_START -> renderSplash(canvas)
-            GameState.PLAYING, GameState.SUPER_MODE, GameState.HURT -> renderPlaying(canvas)
+            GameState.PLAYING, GameState.SUPER_MODE, GameState.SUPER_TRANSITION, GameState.HURT -> renderPlaying(canvas)
             GameState.GAME_OVER -> renderGameOver(canvas)
         }
     }
@@ -481,14 +545,12 @@ class GameEngine(private val context: Context) {
         val fudgeSlotWidth = GameConstants.VIRTUAL_WIDTH / maxFudges.toFloat()
         val fudgeY = 230f
         val clampedFudgeCount = fudgeCount.coerceIn(0, maxFudges)
-
         for (i in 0 until clampedFudgeCount) {
             val frameName = "fudge_$i"
             val frame = fAtlas.getFrame(frameName) ?: fAtlas.frames[i % fAtlas.frames.size]
             val vx = (i + 0.5f) * fudgeSlotWidth
             val targetW = fudgeSlotWidth * 0.85f
             val fudgeScale = targetW / frame.width.toFloat()
-
             SpriteRenderer.drawFrame(
                 canvas = canvas,
                 bitmap = fAtlas.bitmap ?: continue,
@@ -503,6 +565,19 @@ class GameEngine(private val context: Context) {
                 srcRect = srcRect,
                 dstRect = dstRect
             )
+        }
+
+        // 3. Smashed Counter Badge (Visible in Super Mode or after smashing Shy Guys)
+        if (smashedCount > 0 || state == GameState.SUPER_MODE) {
+            textPaint.textSize = 42f * scaleX
+            textPaint.textAlign = Paint.Align.RIGHT
+            canvas.drawText(
+                "SMASHED: $smashedCount",
+                screenWidth - (30f * scaleX),
+                110f * scaleY,
+                textPaint
+            )
+            textPaint.textAlign = Paint.Align.LEFT
         }
     }
 

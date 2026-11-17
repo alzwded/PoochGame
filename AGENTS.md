@@ -237,7 +237,7 @@ object EntityRegistry {
 - [x] Background Graphic (Landscape)
 - [x] Sprite Editor (With 3D RGB Distance Chroma Key export support)
 - [x] Multi-Atlas JSON Parser with `baseScale` and Chroma Key (`chromaKey`, `chromaThreshold`) processing
-- [ ] Sound & Audio Assets
+- [x] Sound & Audio Assets
   - [x] Bark / Arf sound (`sfx_arfarf.wav`)
   - [x] Sad puppy whimper (`sfx_sadpup.wav`)
   - [x] Landing sound (`sfx_thump.wav`)
@@ -259,7 +259,8 @@ object EntityRegistry {
 - [x] Scene State Controller (`TOUCH_TO_START` vs `PLAYING`)
 - [x] Pooch Run Animation Controller (indexed frame lookup)
 - [x] Jump Physics & Jump Animation Trigger
-- [ ] AABB Hitboxes & Visual Debug Draw Toggles
+- [x] AABB Hitboxes
+- [ ] Visual Debug Draw Toggles
 - [x] Obstacle & Collectible Spawner (Shy Guys, Fudges, & 1-in-100 Rare Hearts)
 
 ### Phase 4: UI, Counters & Power-ups
@@ -267,9 +268,9 @@ object EntityRegistry {
 - [x] HP Hearts Counter UI Display (3 Hearts max) & Rare Heart pickup restoration logic
 - [x] Hurt Animation & Invincibility Frames
 - [x] Shy Guy Hurt / Stun Animation
-- [ ] Super Mode State Machine:
+- [x] Super Mode State Machine:
   - Trigger at 10 Fudges
-  - Character scale-up (1.8x - 2.0x beyond `baseScale`) & speed boost
+  - Character scale-up (1.8x - 3.2x beyond `baseScale`) & speed boost
   - Tower spawning (Fudge/Shy Guy stacks)
   - 5-second timer & smooth scale-down transition
 - [ ] Shy Guys Smashed Counter UI

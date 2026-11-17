@@ -230,5 +230,39 @@ class SpawnManagerTest {
         assertFalse(heart.isActive)
         assertEquals(0, spawner.slotIndex)
         assertEquals(0f, spawner.accumulatedDistance, 0.001f)
+        assertFalse(spawner.isSuperMode)
+    }
+
+    @Test
+    fun `super mode triggers shy guy tower spawning on slot tick`() {
+        val frameDt = 0.016f
+        val slotTime = SpawnManager.SLOT_INTERVAL_DISTANCE / 1100f // Super scroll speed
+
+        var elapsed = 0f
+        while (elapsed <= slotTime) {
+            spawner.update(frameDt, 1100f, 260f, GameConstants.MAX_HP, isSuperMode = true)
+            elapsed += frameDt
+        }
+
+        assertTrue(spawner.isSuperMode)
+        // 3 enemies spawned in a stack/tower
+        assertEquals(3, spawner.activeCount)
+    }
+
+    @Test
+    fun `tower spawning halts when isSuperMode parameter becomes false past cutoff`() {
+        val frameDt = 0.016f
+        val slotTime = SpawnManager.SLOT_INTERVAL_DISTANCE / 1100f
+
+        // Advance 1 slot tick with tower spawning disabled (past 4.0s cutoff)
+        var elapsed = 0f
+        while (elapsed <= slotTime) {
+            spawner.update(frameDt, 1100f, 260f, GameConstants.MAX_HP, isSuperMode = false)
+            elapsed += frameDt
+        }
+
+        assertFalse(spawner.isSuperMode)
+        // Active enemies should be 0 or 1 (normal spawn), NOT 3 (tower stack)
+        assertTrue(spawner.activeCount <= 1)
     }
 }

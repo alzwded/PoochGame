@@ -76,13 +76,13 @@ class ShyGuyEnemy(private val atlas: SpriteAtlas) {
     private val dstRect = RectF()
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
 
-    fun spawn(spawnX: Float) {
+    fun spawn(spawnX: Float, yOffset: Float = 0f) {
         state = State.WALKING
         virtualX = spawnX
         scale = EntityRegistry.SHY_GUY.baseScale
         targetScale = scale
         initialHurtScale = scale
-        virtualY = GameConstants.GROUND_Y - (GROUND_OFFSET * scale)
+        virtualY = GameConstants.GROUND_Y - (GROUND_OFFSET * scale) - yOffset
         velocityX = 0f
         velocityY = 0f
         walkTimer = 0f

@@ -25,7 +25,6 @@ import android.graphics.RectF
  * - Strictly zero-allocation per frame rendering loop.
  */
 class PoochPlayer(private val atlas: SpriteAtlas) {
-
     enum class AnimState {
         WALK,
         JUMP_WINDUP,
@@ -33,6 +32,7 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
         JUMP_FALL,
         JUMP_LANDING,
         HURT,
+        SUPER_CUTSCENE,
         GAME_OVER
     }
 
@@ -60,9 +60,13 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
 
         /** Duration over which Pooch scales to targetScale during game over death fling. */
         const val GAME_OVER_FLING_DURATION = 0.85f
-
         /** Distance in unscaled sprite pixels from head origin to ground contact. */
         const val HEAD_TO_GROUND_OFFSET_UNSCALED = 69f
+
+        // Cutscene hop & grow constants
+        const val SUPER_HOP_FRAME_DURATION = 0.08f // 0.08s * 3 frames = 0.24s per hop
+        const val SUPER_HOP_HEIGHT = 65f           // Small hop height in virtual pixels
+        const val SUPER_GROW_DURATION = 0.20f       // Duration of 2x scale-up phase
     }
 
     // Direct indexed arrays for zero-allocation O(1) frame lookup
@@ -102,13 +106,16 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
         private set
     var gameOverTimer: Float = 0f
         private set
-
+    var cutsceneTimer: Float = 0f
+        private set
+    var isCutsceneFinished: Boolean = false
+        private set
+    var isSuperMode: Boolean = false
+        private set
     var isInvincible: Boolean = false
         private set
-
     var isVisible: Boolean = true
         private set
-
     var isMirrored: Boolean = false
         private set
 
@@ -151,6 +158,7 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
      */
     fun reset() {
         val baseScale = EntityRegistry.POOCH.baseScale
+        isSuperMode = false
         scale = baseScale
         targetScale = baseScale
         initialGameOverScale = baseScale
@@ -163,6 +171,63 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
         landingTimer = 0f
         hurtTimer = 0f
         gameOverTimer = 0f
+        cutsceneTimer = 0f
+        isCutsceneFinished = false
+        isInvincible = false
+        isVisible = true
+        isMirrored = false
+        currentFrame = walkFrames[0]
+        updateHitbox(baseScale)
+    }
+
+    /**
+     * Trigger the automated Super Mode cutscene set piece:
+     * Plays 2nd..4th walk frames unmirrored, then mirrored (with sfx_arfarf),
+     * then sets frame 0 facing right and scales up to 2.0x size.
+     */
+    fun triggerSuperCutscene() {
+        animState = AnimState.SUPER_CUTSCENE
+        isSuperMode = true
+        cutsceneTimer = 0f
+        isCutsceneFinished = false
+        isInvincible = true
+        isVisible = true
+        isMirrored = false
+        scale = EntityRegistry.POOCH.baseScale
+        targetScale = EntityRegistry.POOCH.baseScale * GameConstants.SUPER_MODE_SCALE
+        currentFrame = jumpFrames[1] // 2nd frame of jump animation
+        SoundManager.playArfArf()
+    }
+
+    fun endSuperCutscene() {
+        animState = AnimState.WALK
+        isSuperMode = true
+        walkTimer = 0f
+        isCutsceneFinished = true
+        isInvincible = false
+        isMirrored = false
+        scale = EntityRegistry.POOCH.baseScale * GameConstants.SUPER_MODE_SCALE
+        targetScale = scale
+        currentFrame = walkFrames[0]
+    }
+
+    /**
+     * Resets Pooch back to normal size and ground baseline upon exiting Super Mode.
+     * Restores jump state flags.
+     */
+    fun exitSuperMode() {
+        isSuperMode = false
+        val baseScale = EntityRegistry.POOCH.baseScale
+        scale = baseScale
+        targetScale = baseScale
+        virtualY = getGroundHeadY(baseScale)
+        velocityY = 0f
+        isOnGround = true
+        animState = AnimState.WALK
+        walkTimer = 0f
+        jumpTimer = 0f
+        landingTimer = 0f
+        hurtTimer = 0f
         isInvincible = false
         isVisible = true
         isMirrored = false
@@ -176,8 +241,10 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
      * @return true if jump was triggered, false otherwise.
      */
     fun jump(): Boolean {
-        if ((!isOnGround && animState != AnimState.JUMP_LANDING) ||
+        if (isSuperMode ||
+            (!isOnGround && animState != AnimState.JUMP_LANDING) ||
             animState == AnimState.HURT ||
+            animState == AnimState.SUPER_CUTSCENE ||
             animState == AnimState.GAME_OVER
         ) {
             return false
@@ -227,21 +294,31 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
      * @param dt Elapsed delta time in seconds, capped at [GameConstants.MAX_DELTA_TIME].
      * @param isSuperMode Whether super mode is currently active (doubles run tempo).
      */
-    fun update(dt: Float, isSuperMode: Boolean) {
-        val baseScale = if (isSuperMode) {
-            EntityRegistry.POOCH.baseScale * GameConstants.SUPER_MODE_SCALE
-        } else {
-            EntityRegistry.POOCH.baseScale
-        }
-        val groundHeadY = getGroundHeadY(baseScale)
+    fun update(dt: Float, isSuperMode: Boolean, superRemainingTime: Float = -1f) {
+        this.isSuperMode = isSuperMode || animState == AnimState.SUPER_CUTSCENE
+        val baseScale = EntityRegistry.POOCH.baseScale
+        val superScale = baseScale * GameConstants.SUPER_MODE_SCALE
 
-        if (animState != AnimState.GAME_OVER) {
-            scale = baseScale
-            targetScale = baseScale
+        if (animState != AnimState.GAME_OVER && animState != AnimState.SUPER_CUTSCENE) {
+            if (isSuperMode) {
+                if (superRemainingTime in 0f..GameConstants.SUPER_SCALE_DOWN_DURATION) {
+                    val progress = (superRemainingTime / GameConstants.SUPER_SCALE_DOWN_DURATION).coerceIn(0f, 1f)
+                    scale = baseScale + (superScale - baseScale) * progress
+                } else {
+                    scale = superScale
+                }
+            } else {
+                scale = baseScale
+            }
+            targetScale = scale
         }
+        val groundHeadY = getGroundHeadY(scale)
 
         when (animState) {
             AnimState.WALK -> {
+                if (isOnGround) {
+                    virtualY = groundHeadY
+                }
                 val frameDuration = if (isSuperMode) {
                     WALK_FRAME_DURATION * 0.5f
                 } else {
@@ -301,6 +378,9 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
             }
 
             AnimState.JUMP_LANDING -> {
+                if (isOnGround) {
+                    virtualY = groundHeadY
+                }
                 landingTimer -= dt
                 currentFrame = jumpFrames[5]
 
@@ -314,11 +394,9 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
             AnimState.HURT -> {
                 hurtTimer += dt
                 currentFrame = jumpFrames[5] // jump_5 during hurt
-
                 // Non-strobing flicker: show 1/4s, hide 1/4s, show 1/4s, hide 1/4s
                 val quarter = (hurtTimer / HURT_FLICKER_INTERVAL).toInt()
                 isVisible = (quarter % 2 == 0)
-
                 // Maintain physics if hurt mid-air
                 if (!isOnGround) {
                     velocityY += GameConstants.GRAVITY * dt
@@ -331,7 +409,6 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
                         SoundManager.playThump()
                     }
                 }
-
                 if (hurtTimer >= HURT_DURATION) {
                     animState = AnimState.WALK
                     isInvincible = false
@@ -339,6 +416,47 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
                     walkTimer = 0f
                     currentFrame = walkFrames[0]
                 }
+            }
+
+            AnimState.SUPER_CUTSCENE -> {
+                cutsceneTimer += dt
+                val hopDur = SUPER_HOP_FRAME_DURATION * 3f // 0.24s per hop
+                val growDur = SUPER_GROW_DURATION           // 0.20s grow phase
+
+                if (cutsceneTimer < hopDur) {
+                    // Hop 1: facing right, jump_1..jump_3
+                    val progress = (cutsceneTimer / hopDur).coerceIn(0f, 1f)
+                    val frameIdx = 1 + (progress * 2.999f).toInt().coerceIn(0, 2)
+                    currentFrame = jumpFrames[frameIdx]
+                    isMirrored = false
+                    scale = baseScale
+                    val hopY = -Math.sin(progress * Math.PI).toFloat() * SUPER_HOP_HEIGHT
+                    virtualY = getGroundHeadY(scale) + hopY
+                } else if (cutsceneTimer < hopDur * 2f) {
+                    // Hop 2: facing left (mirrored), jump_1..jump_3
+                    val relTime = cutsceneTimer - hopDur
+                    val progress = (relTime / hopDur).coerceIn(0f, 1f)
+                    val frameIdx = 1 + (progress * 2.999f).toInt().coerceIn(0, 2)
+                    currentFrame = jumpFrames[frameIdx]
+                    isMirrored = true
+                    scale = baseScale
+                    val hopY = -Math.sin(progress * Math.PI).toFloat() * SUPER_HOP_HEIGHT
+                    virtualY = getGroundHeadY(scale) + hopY
+                } else if (cutsceneTimer < hopDur * 2f + growDur) {
+                    // Grow phase: facing right, walk_0 frame, scale up to 2x (superScale)
+                    val relTime = cutsceneTimer - (hopDur * 2f)
+                    val growProgress = (relTime / growDur).coerceIn(0f, 1f)
+                    currentFrame = walkFrames[0]
+                    isMirrored = false
+                    //val growProgress = ((cutsceneTimer - frameDur * 6f) / 0.18f).coerceIn(0f, 1f)
+                    scale = baseScale + (superScale - baseScale) * growProgress
+                    virtualY = getGroundHeadY(scale)
+                } else {
+                    // Finish cutscene -> transition to WALK state at super scale
+                    endSuperCutscene()
+                    virtualY = getGroundHeadY(scale)
+                }
+                virtualY = getGroundHeadY(scale)
             }
 
             AnimState.GAME_OVER -> {
@@ -389,8 +507,7 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
         if (!isVisible) return
 
         val bitmap = atlas.bitmap ?: return
-        val mirrored = (animState == AnimState.GAME_OVER && isMirrored)
-
+        val mirrored = if (animState == AnimState.SUPER_CUTSCENE) isMirrored else (animState == AnimState.GAME_OVER && isMirrored)
         SpriteRenderer.drawFrame(
             canvas = canvas,
             bitmap = bitmap,

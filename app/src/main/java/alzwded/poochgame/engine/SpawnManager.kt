@@ -50,6 +50,10 @@ class SpawnManager(
     var lastSpawnedEnemy: ShyGuyEnemy? = null
         private set
 
+    /** True if the spawner is operating in Super Mode. */
+    var isSuperMode: Boolean = false
+        private set
+
     /** Number of currently active enemy sprites. */
     val activeCount: Int
         get() {
@@ -84,6 +88,7 @@ class SpawnManager(
         lastSpawnedEnemy = null
         slotIndex = 0
         accumulatedDistance = 0f
+        isSuperMode = false
     }
 
     /**
@@ -93,8 +98,16 @@ class SpawnManager(
      * @param scrollSpeed Current horizontal scroll speed (px/s).
      * @param playerVirtualX Player's horizontal anchor position.
      * @param playerHP Current player health.
+     * @param isSuperMode True if player is currently in Super Mode.
      */
-    fun update(dt: Float, scrollSpeed: Float, playerVirtualX: Float, playerHP: Int) {
+    fun update(
+        dt: Float,
+        scrollSpeed: Float,
+        playerVirtualX: Float,
+        playerHP: Int,
+        isSuperMode: Boolean = false
+    ) {
+        this.isSuperMode = isSuperMode
         // Advance spawn slot distance
         accumulatedDistance += scrollSpeed * dt
         while (accumulatedDistance >= SLOT_INTERVAL_DISTANCE) {
@@ -119,6 +132,12 @@ class SpawnManager(
      * Executes logic for the current quantized spawn slot.
      */
     private fun onSlotTick(playerHP: Int) {
+        if (isSuperMode) {
+            // Super Mode: Exclusively spawn 3-high Shy Guy towers on EVERY slot tick (full collectible spawn rate)
+            spawnShyGuyTower(height = 3)
+            return
+        }
+
         val currentSlot = slotIndex++
         val isEvenSlot = (currentSlot % 2 == 0)
 
@@ -130,7 +149,7 @@ class SpawnManager(
         }
 
         if (isEvenSlot) {
-            // Even slot: can spawn Enemy, Fudge, or Both
+            // Even slot: can spawn Enemy, Fudge, or Both (and Shy Guy towers during Super Mode)
             if (canSpawnEnemy) {
                 val roll = Random.nextFloat()
                 when {
@@ -207,7 +226,6 @@ class SpawnManager(
      */
     fun spawnShyGuy(): ShyGuyEnemy? {
         if (!canSpawnEnemy) return null
-
         for (i in 0 until MAX_SPRITES) {
             val enemy = enemies[i]
             if (!enemy.isActive) {
@@ -217,9 +235,26 @@ class SpawnManager(
                 return enemy
             }
         }
-
         Log.w(TAG, "Failed to spawn Shy Guy: pool of $MAX_SPRITES is full")
         return null
+    }
+
+    /**
+     * Spawns a vertical stack/tower of Shy Guys (e.g. 3 stacked vertically).
+     */
+    fun spawnShyGuyTower(height: Int = 3) {
+        if (!canSpawnEnemy) return
+        val stackSpacing = 130f * EntityRegistry.SHY_GUY.baseScale
+        for (h in 0 until height) {
+            for (i in 0 until MAX_SPRITES) {
+                val enemy = enemies[i]
+                if (!enemy.isActive) {
+                    enemy.spawn(SPAWN_X, yOffset = h * stackSpacing)
+                    lastSpawnedEnemy = enemy
+                    break
+                }
+            }
+        }
     }
 
     /**

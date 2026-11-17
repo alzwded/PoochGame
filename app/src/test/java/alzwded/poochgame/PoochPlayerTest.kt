@@ -168,4 +168,32 @@ class PoochPlayerTest {
         assertEquals(PoochPlayer.AnimState.JUMP_WINDUP, player.animState)
         assertEquals("jump_0", player.currentFrame.id)
     }
+
+    @Test
+    fun `cannot jump while super mode is active`() {
+        player.update(0.016f, isSuperMode = true)
+        assertTrue(player.isSuperMode)
+
+        val jumpResult = player.jump()
+        assertFalse(jumpResult)
+        assertFalse(player.animState == PoochPlayer.AnimState.JUMP_WINDUP)
+    }
+
+    @Test
+    fun `exitSuperMode resets position to ground baseline, clears velocity, restores grounded and walk state`() {
+        // Put player into super mode
+        player.update(0.1f, isSuperMode = true)
+        assertTrue(player.isSuperMode)
+
+        // Simulate ending super mode
+        player.exitSuperMode()
+
+        assertFalse(player.isSuperMode)
+        assertTrue(player.isOnGround)
+        assertEquals(PoochPlayer.AnimState.WALK, player.animState)
+        assertEquals(0f, player.velocityY, 0.001f)
+        val expectedGroundHeadY = player.getGroundHeadY(EntityRegistry.POOCH.baseScale)
+        assertEquals(expectedGroundHeadY, player.virtualY, 0.001f)
+        assertEquals(EntityRegistry.POOCH.baseScale, player.scale, 0.001f)
+    }
 }

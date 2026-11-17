@@ -25,10 +25,10 @@
 - [x] sprite map loader
 - [x] hit boxes
 - [x] fudge counter
-- [ ] HP hearts counter
+- [x] HP hearts counter
 - [x] hurt animation
 - [x] game over animation
 - [x] shy guy hurt animation
-- [ ] power up scene on 10 fudges + fudge/shy guy towers (5s)
+- [x] power up scene on 10 fudges + fudge/shy guy towers (5s)
 - [ ] shy guys smashed counter
 - [ ] on main screen, have pooch jumping around and shagay waving :-)
