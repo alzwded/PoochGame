@@ -4,5 +4,40 @@
 # For more details, see
 #   https://d.android.com/r/tools/r8/keep-rules
 
-# Keep game engine classes and data models from R8 obfuscation/shrinking (preventing JSON parsing crashes)
--keep class alzwded.poochgame.engine.** { *; }
+# ====================================================================
+# Pooch Runner Project-Specific R8 / ProGuard Rules
+# ====================================================================
+
+# 1. Keep all app & engine classes (MainActivity, GameEngine, GameSurfaceView, etc.)
+-keep class alzwded.poochgame.** { *; }
+
+# redundant
+## 2. Preserve sprite descriptor data classes & entity configurations
+#-keepclassmembers class alzwded.poochgame.engine.SpriteFrame { *; }
+#-keepclassmembers class alzwded.poochgame.engine.EntityTypeConfig { *; }
+#
+## 3. Preserve Enum methods (GameState, AnimState, State, Type)
+## Ensures valueOf() and values() reflectively/dynamically referenced aren't stripped
+#-keepclassmembers enum alzwded.poochgame.engine.** {
+#    public static **[] values();
+#    public static ** valueOf(java.lang.String);
+#}
+#
+## 4. Preserve custom SurfaceView constructors (if referenced or inflated)
+#-keep class alzwded.poochgame.engine.GameSurfaceView {
+#    public <init>(android.content.Context);
+#    public <init>(android.content.Context, android.util.AttributeSet);
+#    public <init>(android.content.Context, android.util.AttributeSet, int);
+#}
+
+# 5. Retain line numbers and source files for useful release crash stack traces
+#-keepattributes SourceFile,LineNumberTable
+#-renamesourcefileattribute SourceFile
+
+# 6. Prevent R8 from repackaging / breaking package-private access in Kotlin stdlib
+-keep class kotlin.collections.** { *; }
+-keep class kotlin.** { *; }
+
+# Preserve AndroidX Lifecycle & SavedState internal collection access
+-keep class androidx.lifecycle.** { *; }
+-keep class androidx.savedstate.** { *; }

@@ -39,6 +39,7 @@ android {
         release {
             manifestPlaceholders["appName"] = "Pooch Runner"
             applicationIdSuffix = ".gold"
+            //isDebuggable = true
 
             optimization {
                 enable = true
