@@ -58,14 +58,10 @@ class FudgeCollectible(private val atlas: SpriteAtlas) {
         // Randomly select one of the fudge frames (fudge_0..fudge_7)
         currentFrame = allFrames.random()
 
-        // Account for frame height and originY to correctly anchor base on ground
-        val groundOffset = (currentFrame.height - currentFrame.originY) * scale
-        val baseGroundY = GameConstants.GROUND_Y - groundOffset
-
         virtualY = if (isFlying) {
-            baseGroundY - MAX_JUMP_HEIGHT
+            GameConstants.GROUND_Y - MAX_JUMP_HEIGHT
         } else {
-            baseGroundY
+            GameConstants.GROUND_Y
         }
 
         virtualX = spawnX

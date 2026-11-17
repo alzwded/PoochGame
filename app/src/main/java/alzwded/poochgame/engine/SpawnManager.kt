@@ -61,7 +61,7 @@ class SpawnManager(
             var count = 0
             for (i in 0 until MAX_SPRITES) {
                 if (enemies[i].isActive) count++
-                if (towers[i].isActive) count++
+                if (towers[i].isActive) count += towers[i].height
             }
             return count
         }

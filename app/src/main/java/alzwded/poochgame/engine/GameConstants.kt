@@ -54,7 +54,7 @@ object GameConstants {
     const val MAX_HP = 3
 
     /** Ground Y position as a fraction of virtual height (from top). */
-    const val GROUND_Y_FRACTION = 0.78f
+    const val GROUND_Y_FRACTION = 0.80f
 
     /** Ground Y position in virtual pixels. */
     val GROUND_Y: Float get() = VIRTUAL_HEIGHT * GROUND_Y_FRACTION

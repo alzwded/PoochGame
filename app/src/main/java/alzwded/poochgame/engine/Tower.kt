@@ -117,9 +117,7 @@ class Tower(
                     currentFudgeFrames[i] = fudgeFramesPool.random()
                 }
             }
-            val bottomFudge = currentFudgeFrames[0]
-            val groundOffset = (bottomFudge.height - bottomFudge.originY).toFloat()
-            virtualY = GameConstants.GROUND_Y - (groundOffset * scale)
+            virtualY = GameConstants.GROUND_Y
         }
 
         walkTimer = 0f

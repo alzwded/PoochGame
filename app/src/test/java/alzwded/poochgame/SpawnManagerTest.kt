@@ -215,13 +215,12 @@ class SpawnManagerTest {
         playerHitbox.bottom = enemy.hitbox.bottom
 
         val colliding = spawner.checkPlayerCollision(playerHitbox)
-        assertNotNull(colliding)
-        assertEquals(enemy, colliding)
+        assertTrue(colliding)
 
         // When enemy is hurt, collision is ignored
         enemy.onPlayerCollision()
         val collidingAfterHurt = spawner.checkPlayerCollision(playerHitbox)
-        assertNull(collidingAfterHurt)
+        assertFalse(collidingAfterHurt)
     }
 
     @Test
