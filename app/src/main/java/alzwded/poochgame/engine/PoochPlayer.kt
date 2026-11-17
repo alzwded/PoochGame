@@ -531,9 +531,9 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
         val bottom = top + h
 
         val insetFactor = if (isSuperMode) {
-            EntityRegistry.POOCH.hitboxInsetFactor
+            1f
         } else {
-            0f
+            EntityRegistry.POOCH.hitboxInsetFactor
         }
         val insetX = w * (1f - insetFactor) * 0.5f
         val insetY = h * (1f - insetFactor) * 0.5f
