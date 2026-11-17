@@ -178,7 +178,7 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
         isVisible = true
         isMirrored = false
         currentFrame = walkFrames[0]
-        updateHitbox(baseScale)
+        updateHitbox(baseScale, isSuperMode)
     }
 
     /**
@@ -233,7 +233,7 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
         isVisible = true
         isMirrored = false
         currentFrame = walkFrames[0]
-        updateHitbox(baseScale)
+        updateHitbox(baseScale, false)
     }
 
     /**
@@ -518,10 +518,10 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
             }
         }
 
-        updateHitbox(scale)
+        updateHitbox(scale, isSuperMode)
     }
 
-    private fun updateHitbox(scale: Float) {
+    private fun updateHitbox(scale: Float, isSuperMode: Boolean) {
         val f = currentFrame
         val w = f.width * scale
         val h = f.height * scale
@@ -530,7 +530,11 @@ class PoochPlayer(private val atlas: SpriteAtlas) {
         val right = left + w
         val bottom = top + h
 
-        val insetFactor = EntityRegistry.POOCH.hitboxInsetFactor
+        val insetFactor = if (isSuperMode) {
+            EntityRegistry.POOCH.hitboxInsetFactor
+        } else {
+            0f
+        }
         val insetX = w * (1f - insetFactor) * 0.5f
         val insetY = h * (1f - insetFactor) * 0.5f
         hitbox.left = left + insetX
