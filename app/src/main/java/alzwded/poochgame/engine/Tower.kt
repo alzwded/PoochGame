@@ -63,8 +63,6 @@ class Tower(
 
     var virtualX: Float = 0f
     var virtualY: Float = 0f
-    var velocityX: Float = 0f
-    var velocityY: Float = 0f
     var height: Int = 3
     var scale: Float = 1.0f
     var targetScale: Float = 1.0f
@@ -86,11 +84,23 @@ class Tower(
     private val dstRect = RectF()
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
 
+    // Independent velocities and offsets per stack layer (0 = bottommost, 1 = middle, 2 = topmost)
+    private val vx = FloatArray(3)
+    private val vy = FloatArray(3)
+    private val offsetX = FloatArray(3)
+    private val offsetY = FloatArray(3)
+
     fun spawn(spawnX: Float, towerHeight: Int = 3, forcedType: Type? = null) {
         state = State.WALKING
         type = forcedType ?: if (Random.nextBoolean()) Type.SHY_GUY else Type.FUDGE
         virtualX = spawnX
         height = towerHeight
+        for (i in 0 until 3) {
+            offsetX[i] = 0f
+            offsetY[i] = 0f
+            vx[i] = 0f
+            vy[i] = 0f
+        }
 
         if (type == Type.SHY_GUY) {
             scale = EntityRegistry.SHY_GUY.baseScale
@@ -112,8 +122,6 @@ class Tower(
             virtualY = GameConstants.GROUND_Y - (groundOffset * scale)
         }
 
-        velocityX = 0f
-        velocityY = 0f
         walkTimer = 0f
         hurtTimer = 0f
         isCleared = false
@@ -128,8 +136,22 @@ class Tower(
         hurtTimer = 0f
         initialHurtScale = scale
         targetScale = 2.0f
-        velocityY = -900f
-        velocityX = if (Random.nextBoolean()) 120f else -120f
+
+        // Assign distinct explosive trajectories for each of the 3 sprites in the tower
+        vx[0] = -300f
+        vy[0] = -700f
+
+        vx[1] = 0f
+        vy[1] = -1050f
+
+        vx[2] = 300f
+        vy[2] = -850f
+
+        for (i in 0 until 3) {
+            offsetX[i] = 0f
+            offsetY[i] = 0f
+        }
+
         currentHurtFrame = hurtFrames[0]
         return true
     }
@@ -158,9 +180,13 @@ class Tower(
             State.HURT_FLING -> {
                 hurtTimer += dt
                 clearHitbox()
-                velocityY += GameConstants.GRAVITY * dt
-                virtualY += velocityY * dt
-                virtualX += velocityX * dt
+
+                // Update each sprite layer independently with its own velocity and gravity
+                for (i in 0 until height.coerceAtMost(3)) {
+                    vy[i] += GameConstants.GRAVITY * dt
+                    offsetX[i] += vx[i] * dt
+                    offsetY[i] += vy[i] * dt
+                }
 
                 if (type == Type.SHY_GUY) {
                     val frameIdx = ((hurtTimer / HURT_FRAME_DURATION).toInt()) % 4
@@ -170,7 +196,17 @@ class Tower(
                 val progress = (hurtTimer / FLING_DURATION).coerceIn(0f, 1f)
                 scale = initialHurtScale + (targetScale - initialHurtScale) * progress
 
-                if (virtualY > GameConstants.VIRTUAL_HEIGHT + 250f || scale <= 0.03f) {
+                var allOffscreen = true
+                val stackSpacing = 130f * scale
+                for (i in 0 until height.coerceAtMost(3)) {
+                    val partY = virtualY - (i * stackSpacing) + offsetY[i]
+                    if (partY <= GameConstants.VIRTUAL_HEIGHT + 250f) {
+                        allOffscreen = false
+                        break
+                    }
+                }
+
+                if (hurtTimer >= FLING_DURATION || allOffscreen || scale <= 0.03f) {
                     state = State.INACTIVE
                 }
             }
@@ -209,16 +245,17 @@ class Tower(
 
         if (type == Type.SHY_GUY) {
             val bitmap = shyguyAtlas.bitmap ?: return
-            val mirrored = (state == State.WALKING || velocityX < 0)
             val frame = if (state == State.WALKING) currentWalkFrame else currentHurtFrame
-
             for (h in 0 until height) {
-                val yPos = virtualY - (h * stackSpacing)
+                val idx = h.coerceIn(0, 2)
+                val mirrored = (state == State.WALKING || vx[idx] < 0)
+                val xPos = virtualX + offsetX[idx]
+                val yPos = virtualY - (h * stackSpacing) + offsetY[idx]
                 SpriteRenderer.drawFrame(
                     canvas = canvas,
                     bitmap = bitmap,
                     frame = frame,
-                    virtualX = virtualX,
+                    virtualX = xPos,
                     virtualY = yPos,
                     scale = scale,
                     scaleX = scaleX,
@@ -232,13 +269,14 @@ class Tower(
         } else {
             val bitmap = fudgeAtlas.bitmap ?: return
             for (h in 0 until height) {
-                val yPos = virtualY - (h * stackSpacing)
+                val xPos = virtualX + offsetX[h.coerceIn(0, 2)]
+                val yPos = virtualY - (h * stackSpacing) + offsetY[h.coerceIn(0, 2)]
                 val frame = currentFudgeFrames[h.coerceIn(0, 2)]
                 SpriteRenderer.drawFrame(
                     canvas = canvas,
                     bitmap = bitmap,
                     frame = frame,
-                    virtualX = virtualX,
+                    virtualX = xPos,
                     virtualY = yPos,
                     scale = scale,
                     scaleX = scaleX,
@@ -254,6 +292,10 @@ class Tower(
 
     fun reset() {
         state = State.INACTIVE
+        for (i in 0 until 3) {
+            offsetX[i] = 0f
+            offsetY[i] = 0f
+        }
         clearHitbox()
         isCleared = true
     }
